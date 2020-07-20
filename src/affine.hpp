@@ -96,7 +96,35 @@ public:
 
     bool operator==(const affine_form& other)
     {
-        return false; // to be implemented
+        if (length_ != other.length_) {
+            return false;
+        }
+
+        auto not_equal = [](double x, double y) {
+            auto a = std::abs(x);
+            auto b = std::abs(y);
+            auto c = std::abs(x-y);
+            if (!(a < 1 && b < 1)) { 
+                c /= (a+b); 
+            }
+            return c > std::numeric_limits<double>::epsilon();
+        };
+
+        // no equivalence if the central value is not equal
+        if (not_equal(center_, other.center_)) {
+            return false;
+        }
+
+        for (size_t i = 0; i < length_; ++i) {
+            if (indices_(i) != other.indices_(i)) {
+                return false;
+            }
+            if (not_equal(deviations_(i), other.deviations_(i))) {
+                return false;
+            }
+        }
+
+        return true;
     }
 
     // interval representation
@@ -135,13 +163,13 @@ public:
     {
         if (length_ == 0 && other.length_ == 0) {
             return affine_form(center_ + other.center_);
-        } 
+        }
 
         if (length_ == 0) {
             affine_form f(other);
             f += center_;
             return f;
-        } 
+        }
 
         if (other.length_ == 0) {
             affine_form f(*this);
@@ -157,17 +185,16 @@ public:
         // do a set union of the indices
         // the indices_ arrays are assumed to be sorted
         // we fill the deviations array at the same time
-        while(i < indices_.size() && j < other.indices_.size()) {
+        while (i < indices_.size() && j < other.indices_.size()) {
             auto a = indices_(i);
             auto b = other.indices_(j);
-            
+
             auto d = a < b ? deviations_(i) : other.deviations_(j);
             auto v = std::min(a, b);
 
-            if (idx.size() == 0 || idx(idx.size()-1) != v)
-            {
+            if (idx.size() == 0 || idx(idx.size() - 1) != v) {
                 idx(k) = v;
-                dev(k) = d; 
+                dev(k) = d;
 
                 ++k;
             }
@@ -179,7 +206,7 @@ public:
         return affine_form(center_ + other.center_, dev, idx, k);
     }
 
-    affine_form& operator+=(const affine_form& other) 
+    affine_form& operator+=(const affine_form& other)
     {
         auto tmp = *this + other;
         std::swap(tmp, *this);
@@ -203,4 +230,3 @@ private:
 } // namespace pp
 
 #endif
-

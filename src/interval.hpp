@@ -84,7 +84,7 @@ public:
 
         std::fesetround(rounding_mode);
 
-        return l >= u ? l : u;
+        return std::max(l, u);
     }
 
     affine_interval minimal_periodic(const affine_interval& interval) 
