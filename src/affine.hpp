@@ -16,7 +16,7 @@ namespace {
 template<typename T>
 static auto eigen_array(std::vector<T> const& vec)
 {
-    return Eigen::Map<array<T>>(vec.data(), vec.size());
+    return Eigen::Map<const array<T>>(vec.data(), vec.size());
 }
 
 template<typename T>
@@ -39,7 +39,6 @@ public:
         deviations_[0] = (interval.upper() - interval.lower()) / 2;
         indices_[0] = this->context().increment_last(); // assign and increment global index
         update_radius();
-        this->context().add(*this);
     }
 
     explicit affine_form(affine_context& context, double v)
@@ -47,7 +46,6 @@ public:
         , center_(v)
         , radius_(0)
     {
-        this->context().add(*this);
     }
 
     explicit affine_form(affine_context& context, double v, std::vector<double> const& deviations, std::vector<size_t> const& indices, size_t len)
@@ -59,7 +57,6 @@ public:
         , length_(len)
     {
         update_radius();
-        this->context().add(*this);
     }
 
     // not explicit because we want to allow implicit copy
@@ -71,7 +68,15 @@ public:
         , indices_(other.indices_)
         , length_(other.length_)
     {
-        this->context().add(*this);
+    }
+
+    void swap(affine_form& other) 
+    {
+        std::swap(center_, other.center_);
+        std::swap(radius_, other.radius_);
+        std::swap(length_, other.length_);
+        deviations_.swap(other.deviations_);
+        indices_.swap(other.indices_);
     }
 
     affine_context& context() const { return context_.get(); }
@@ -136,6 +141,7 @@ public:
     // assignment operators
     affine_form& operator=(double);
     affine_form& operator=(const affine_form&);
+    affine_form& operator=(affine_form);
 
     // arithmetic operations
     affine_form& operator+=(double);

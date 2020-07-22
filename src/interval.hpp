@@ -110,6 +110,15 @@ public:
         return s;
     }
 
+    bool operator==(affine_interval const& other) const 
+    {
+        auto eps = std::numeric_limits<double>::epsilon();
+        auto l = std::abs(lower_ - other.lower_);
+        auto u = std::abs(upper_ - other.upper_);
+
+        return l < eps && u < eps;
+    }
+
 private:
     double lower_;
     double upper_;

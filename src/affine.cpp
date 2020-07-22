@@ -52,9 +52,14 @@ affine_form& affine_form::operator=(affine_form const& other)
 {
     if (this != &other)
     {
-        affine_form tmp(other);
-        std::swap(tmp, *this);
+        affine_form tmp(other.context(), other.center(), other.deviations_, other.indices_, other.length_);
     }
+    return *this;
+}
+
+affine_form& affine_form::operator=(affine_form other)
+{
+    swap(other);
     return *this;
 }
 
@@ -131,28 +136,11 @@ affine_form affine_form::operator+(affine_form const& other) const
     return affine_form(context_, center_ + other.center_, dev, idx, idx.size());
 }
 
-// the following operators (+=, -, -=) reuse operator+
-// this might be less efficient but avoids code duplication
-// and makes the code much simpler and less bug-prone
-affine_form& affine_form::operator+=(affine_form const& other)
-{
-    auto tmp = *this + other;
-    std::swap(tmp, *this);
-    return *this;
-}
-
 affine_form affine_form::operator-(affine_form const& other) const
 {
     auto tmp(other);
     tmp *= -1.0;
     return *this + tmp;
-}
-
-affine_form& affine_form::operator-=(affine_form const& other)
-{
-    auto tmp = *this - other;
-    std::swap(tmp, *this);
-    return *this;
 }
 
 affine_form affine_form::operator-() const
@@ -200,22 +188,23 @@ affine_form affine_form::operator*(affine_form const& other) const
 
     size_t i = 0, j = 0;
     for (size_t k = 0; k < dev.size(); ++k) {
+        if (k == length_ || indices_[i] != idx[k]) {
+            dev[k] = c1 * other.deviations_[j];
+            ++j;
+            continue;
+        }
+        if (k == other.length_ || other.indices_[j] != idx[k]) {
+            dev[k] = c2 * deviations_[i];
+            ++i;
+            continue;
+        }
+
         auto x1 = indices_[i];
         auto x2 = other.indices_[j];
 
         auto d1 = deviations_[i];
         auto d2 = other.deviations_[j];
 
-        if (k == length_ || indices_[i] != idx[k]) {
-            dev[k] = c1 * d2;
-            ++j;
-            continue;
-        }
-        if (k == other.length_ || other.indices_[j] != idx[k]) {
-            dev[k] = c2 * d1;
-            ++i;
-            continue;
-        }
         dev[k] = c1 * d2 + c2 * d1;
         common_center += d1 * d2;
         common_deviation += std::fabs(d1 * d2);
@@ -235,7 +224,30 @@ affine_form affine_form::operator*(affine_form const& other) const
     // TODO: research/implement SECANT approximation type
     dev.push_back(delta - common_deviation);
 
-    return affine_form(context(), c1 * c2 + common_center, dev, idx, context().last_index()); 
+    return affine_form(context(), c1 * c2 + common_center, dev, idx, idx.size()); 
+}
+
+// not the most efficient approach but reduces code duplication
+// and the probability for mistakes and bugs
+affine_form& affine_form::operator+=(affine_form const& other)
+{
+    auto tmp = *this + other;
+    swap(tmp);
+    return *this;
+}
+
+affine_form& affine_form::operator-=(affine_form const& other)
+{
+    auto tmp = *this - other;
+    swap(tmp);
+    return *this;
+}
+
+affine_form& affine_form::operator*=(affine_form const& other)
+{
+    auto tmp = *this * other;
+    swap(tmp);
+    return *this;
 }
 } // namespace
 
