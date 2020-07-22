@@ -1,11 +1,9 @@
 #ifndef PAPPUS_AF_HPP
 #define PAPPUS_AF_HPP
 
+#include "context.hpp"
 #include "interval.hpp"
 
-#include <algorithm>
-#include <cmath>
-#include <execution>
 #include <vector>
 
 #include <Eigen/Eigen>
@@ -14,38 +12,69 @@ namespace pappus {
 template <typename T>
 using array = Eigen::Array<T, Eigen::Dynamic, 1>;
 
+namespace {
+template<typename T>
+static auto eigen_array(std::vector<T> const& vec)
+{
+    return Eigen::Map<array<T>>(vec.data(), vec.size());
+}
+
+template<typename T>
+static auto eigen_array(std::vector<T>& vec)
+{
+    return Eigen::Map<array<T>>(vec.data(), vec.size());
+}
+}
+
 class affine_form {
 public:
-    explicit affine_form(const affine_interval& interval)
-        : center_(interval.mid())
+    explicit affine_form(affine_context& context, affine_interval const& interval)
+        : context_(context)
+        , center_((interval.upper() + interval.lower()) / 2)
         , radius_(0)
+        , deviations_(1)
+        , indices_(1)
+        , length_(1)
     {
+        deviations_[0] = (interval.upper() - interval.lower()) / 2;
+        indices_[0] = this->context().increment_last(); // assign and increment global index
+        update_radius();
+        this->context().add(*this);
     }
 
-    explicit affine_form(double v)
-        : center_(v)
+    explicit affine_form(affine_context& context, double v)
+        : context_(context)
+        , center_(v)
         , radius_(0)
     {
+        this->context().add(*this);
     }
 
-    explicit affine_form(double v, array<double> const& deviations, array<size_t> const& indices, size_t len)
-        : center_(v)
-        , radius_(deviations.abs().sum())
+    explicit affine_form(affine_context& context, double v, std::vector<double> const& deviations, std::vector<size_t> const& indices, size_t len)
+        : context_(context)
+        , center_(v)
+        , radius_(0)
         , deviations_(deviations)
         , indices_(indices)
         , length_(len)
     {
+        update_radius();
+        this->context().add(*this);
     }
 
     // not explicit because we want to allow implicit copy
     affine_form(const affine_form& other)
-        : center_(other.center_)
+        : context_(other.context_)
+        , center_(other.center_)
         , radius_(other.radius_)
         , deviations_(other.deviations_)
         , indices_(other.indices_)
         , length_(other.length_)
     {
+        this->context().add(*this);
     }
+
+    affine_context& context() const { return context_.get(); }
 
     double center() const { return center_; }
     double radius() const { return radius_; }
@@ -55,7 +84,7 @@ public:
 
     double abs_max() const
     {
-        return std::max(std::abs(min()), std::abs(max()));
+        return std::fmax(std::fabs(min()), std::fabs(max()));
     }
 
     double abs_min() const
@@ -63,15 +92,18 @@ public:
         auto min_ = min();
         auto max_ = max();
 
-        auto abs_min_ = std::abs(min_);
-        auto abs_max_ = std::abs(max_);
+        auto abs_min_ = std::fabs(min_);
+        auto abs_max_ = std::fabs(max_);
 
         return std::signbit(min_) == std::signbit(max_)
-            ? std::min(abs_min_, abs_max_)
+            ? std::fmin(abs_min_, abs_max_)
             : 0;
     }
 
     size_t size() const { return indices_.size(); }
+
+    size_t length() const { return length_; }
+    size_t last_index() const { return indices_[length_-1]; }
 
     // comparison operators
     bool operator<(const affine_form& other)
@@ -94,139 +126,64 @@ public:
         return !(*this < other);
     }
 
-    bool operator==(const affine_form& other)
-    {
-        if (length_ != other.length_) {
-            return false;
-        }
-
-        auto not_equal = [](double x, double y) {
-            auto a = std::abs(x);
-            auto b = std::abs(y);
-            auto c = std::abs(x-y);
-            if (!(a < 1 && b < 1)) { 
-                c /= (a+b); 
-            }
-            return c > std::numeric_limits<double>::epsilon();
-        };
-
-        // no equivalence if the central value is not equal
-        if (not_equal(center_, other.center_)) {
-            return false;
-        }
-
-        for (size_t i = 0; i < length_; ++i) {
-            if (indices_(i) != other.indices_(i)) {
-                return false;
-            }
-            if (not_equal(deviations_(i), other.deviations_(i))) {
-                return false;
-            }
-        }
-
-        return true;
-    }
-
+    bool operator==(const affine_form& other) const;
     // interval representation
-    affine_interval to_inverval() const
+    affine_interval to_interval() const
     {
         return affine_interval(min(), max());
     }
 
+    // assignment operators
+    affine_form& operator=(double);
+    affine_form& operator=(const affine_form&);
+
     // arithmetic operations
-    affine_form& operator+=(double v)
+    affine_form& operator+=(double);
+    affine_form& operator-=(double);
+    affine_form& operator*=(double);
+    affine_form& operator/=(double);
+    affine_form operator*(double) const;
+    affine_form operator-() const;
+    affine_form operator^(int) const;
+
+    affine_form operator+(affine_form const&) const;
+    affine_form operator-(affine_form const&) const;
+    affine_form operator*(affine_form const&) const;
+    affine_form operator/(affine_form const&) const;
+    affine_form operator^(affine_form const&) const;
+
+    affine_form& operator+=(affine_form const&);
+    affine_form& operator-=(affine_form const&);
+    affine_form& operator*=(affine_form const&);
+    affine_form& operator/=(affine_form const&);
+
+    friend std::ostream& operator<<(std::ostream& s, affine_form& af)
     {
-        center_ += v;
-        return *this;
+        s << "-------------------\n";
+        s << "center: " << af.center_ << "\n";
+        s << "radius: " << af.radius_ << "\n";
+        s << "deviations: " << eigen_array(af.deviations_).transpose() << "\n";
+        s << "indices: " << eigen_array(af.indices_).transpose() << "\n";
+        s << "-------------------\n";
+        return s;
     }
 
-    affine_form& operator-=(double v)
-    {
-        center_ -= v;
-        return *this;
-    }
+private : 
+std::reference_wrapper<affine_context> context_;
+double center_; // central value
+double radius_; // affine radius
 
-    affine_form& operator*=(double v)
-    {
-        deviations_ *= v;
-        center_ *= v;
-        radius_ *= std::abs(v);
-        return *this;
-    }
+std::vector<double> deviations_; // vector of partial deviations
+std::vector<size_t> indices_; // vector of indices
 
-    affine_form& operator/=(double v)
-    {
-        return operator*=(1.0 / v);
-    }
+size_t length_; // the actual number of indices still in use by this affine form
 
-    affine_form operator+(const affine_form& other) const
-    {
-        if (length_ == 0 && other.length_ == 0) {
-            return affine_form(center_ + other.center_);
-        }
+void update_radius()
+{
+    radius_ = eigen_array(deviations_).segment(0, length_).abs().sum();
+}
 
-        if (length_ == 0) {
-            affine_form f(other);
-            f += center_;
-            return f;
-        }
-
-        if (other.length_ == 0) {
-            affine_form f(*this);
-            f += other.center_;
-            return f;
-        }
-
-        array<size_t> idx(length_ + other.length_);
-        array<double> dev(length_ + other.length_);
-
-        size_t i = 0, j = 0, k = 0;
-
-        // do a set union of the indices
-        // the indices_ arrays are assumed to be sorted
-        // we fill the deviations array at the same time
-        while (i < indices_.size() && j < other.indices_.size()) {
-            auto a = indices_(i);
-            auto b = other.indices_(j);
-
-            auto d = a < b ? deviations_(i) : other.deviations_(j);
-            auto v = std::min(a, b);
-
-            if (idx.size() == 0 || idx(idx.size() - 1) != v) {
-                idx(k) = v;
-                dev(k) = d;
-
-                ++k;
-            }
-
-            i += a <= b;
-            j += b <= a;
-        }
-
-        return affine_form(center_ + other.center_, dev, idx, k);
-    }
-
-    affine_form& operator+=(const affine_form& other)
-    {
-        auto tmp = *this + other;
-        std::swap(tmp, *this);
-        return *this;
-    }
-
-private:
-    double center_; // central v
-    double radius_; // affine radius
-
-    array<double> deviations_; // vector of partial deviations
-    array<size_t> indices_; // vector of indices
-
-    size_t length_; // the actual number of indices still in use by this affine form
-
-    void update_radius()
-    {
-        radius_ = deviations_.abs().sum();
-    }
 };
-} // namespace pp
+} // namespace pappus
 
 #endif

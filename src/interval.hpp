@@ -2,9 +2,11 @@
 #define PAPPUS_INTERVAL_HPP
 
 #include <cassert>
-#include <cfenv>
 #include <cmath>
+#include <cfenv>
 #include <iostream>
+#include <ostream>
+#include <utility>
 
 namespace pappus {
 class affine_interval {
@@ -47,7 +49,7 @@ public:
 
     std::pair<double, double> bounds() const
     {
-        return std::make_pair(lower_, upper_);
+        return std::pair<double, double>(lower_, upper_);
     }
 
     double mid() const
@@ -84,7 +86,7 @@ public:
 
         std::fesetround(rounding_mode);
 
-        return std::max(l, u);
+        return std::fmax(l, u);
     }
 
     affine_interval minimal_periodic(const affine_interval& interval) 
