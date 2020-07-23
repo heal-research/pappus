@@ -9,6 +9,7 @@
 #include <Eigen/Eigen>
 
 namespace pappus {
+
 template <typename T>
 using array = Eigen::Array<T, Eigen::Dynamic, 1>;
 
@@ -148,7 +149,10 @@ public:
     affine_form& operator-=(double);
     affine_form& operator*=(double);
     affine_form& operator/=(double);
+    affine_form operator+(double) const;
     affine_form operator*(double) const;
+    affine_form operator-(double) const;
+    affine_form operator/(double) const;
     affine_form operator-() const;
     affine_form operator^(int) const;
 
@@ -163,6 +167,15 @@ public:
     affine_form& operator*=(affine_form const&);
     affine_form& operator/=(affine_form const&);
 
+    // other operations
+    affine_form inv() const;
+
+    // friends
+    friend affine_form operator+(double v, affine_form const& af) { return af + v; }
+    friend affine_form operator-(double v, affine_form const& af) { return af - v; }
+    friend affine_form operator*(double v, affine_form const& af) { return af * v; }
+    friend affine_form operator/(double v, affine_form const& af) { return af / v; }
+
     friend std::ostream& operator<<(std::ostream& s, affine_form& af)
     {
         s << "-------------------\n";
@@ -170,6 +183,7 @@ public:
         s << "radius: " << af.radius_ << "\n";
         s << "deviations: " << eigen_array(af.deviations_).transpose() << "\n";
         s << "indices: " << eigen_array(af.indices_).transpose() << "\n";
+        s << "length: " << af.length_ << "\n";
         s << "-------------------\n";
         return s;
     }
@@ -190,6 +204,7 @@ void update_radius()
 }
 
 };
+
 } // namespace pappus
 
 #endif

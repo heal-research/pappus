@@ -6,6 +6,7 @@
 #include <cfenv>
 #include <iostream>
 #include <ostream>
+#include <limits>
 #include <utility>
 
 namespace pappus {
@@ -54,22 +55,20 @@ public:
 
     double mid() const
     {
-        double l, u;
-
         auto rounding_mode = std::fegetround();
 
         // lower
         std::fesetround(FE_DOWNWARD);
-        l = lower_ * 0.5;
+        auto lo = lower_ * 0.5;
 
         // upper
         std::fesetround(FE_UPWARD);
-        u = upper_ * 0.5;
+        auto up = upper_ * 0.5;
 
         // restore the original rounding mode
         std::fesetround(rounding_mode);
 
-        return l + u;
+        return lo + up;
     }
 
     double radius() const
@@ -113,8 +112,8 @@ public:
     bool operator==(affine_interval const& other) const 
     {
         auto eps = std::numeric_limits<double>::epsilon();
-        auto l = std::abs(lower_ - other.lower_);
-        auto u = std::abs(upper_ - other.upper_);
+        auto l = std::fabs(lower_ - other.lower_);
+        auto u = std::fabs(upper_ - other.upper_);
 
         return l < eps && u < eps;
     }
@@ -125,8 +124,10 @@ private:
 
     static std::pair<double, double> check_bounds(double lo, double hi)
     {
+        assert(!std::isnan(lo));
+        assert(!std::isnan(hi));
         assert(lo <= hi);
-        return std::make_pair(lo, hi);
+        return std::pair<double, double>(lo, hi);
     }
 
     explicit affine_interval(std::pair<double, double> interval)

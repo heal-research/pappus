@@ -9,12 +9,13 @@
 using af = pappus::affine_form;
 using ai = pappus::affine_interval;
 
+constexpr double eps = std::numeric_limits<double>::epsilon();
+
 bool operator==(ai const& lhs, AAInterval const& rhs)
 {
-    return lhs.lower() == rhs.getlo()
-        && lhs.mid() == rhs.mid()
-        && lhs.upper() == rhs.gethi()
-        && lhs.radius() == rhs.radius();
+    auto l = std::fabs(lhs.lower() - rhs.getlo());
+    auto u = std::fabs(lhs.upper() - rhs.gethi());
+    return l < eps && u < eps; 
 }
 
 bool operator==(AAInterval const& lhs, ai const& rhs)
@@ -35,8 +36,8 @@ TEST_CASE("operator+(af)")
     af z1 = x1 + y1;
 
     // aaflib
-    AAInterval u2(-2, 3);
-    AAInterval v2(-1, 1);
+    AAInterval u2(u1.lower(), u1.upper());
+    AAInterval v2(v1.lower(), v1.upper());
 
     AAF x2(u2);
     AAF y2(v2);
@@ -72,8 +73,8 @@ TEST_CASE("operator*(af)")
 
     af z1 = x1 * y1;
 
-    AAInterval u2(-2, 3);
-    AAInterval v2(-1, 1);
+    AAInterval u2(u1.lower(), u1.upper());
+    AAInterval v2(v1.lower(), v1.upper());
 
     AAF x2(u2);
     AAF y2(v2);
@@ -96,4 +97,18 @@ TEST_CASE("operator*=(af)")
     x1 *= y1;
 
     CHECK(z1.to_interval() == x1.to_interval());
+}
+
+TEST_CASE("affine_form.inv()")
+{
+    ai u1(1, 4);
+    pappus::affine_context ctx;
+    af x1(ctx, u1);
+    af y1 = x1.inv();
+
+    AAInterval u2(u1.lower(), u1.upper());
+    AAF x2(u2);
+    AAF y2 = inv(x2);
+
+    CHECK(y1.to_interval() == y2.convert());
 }
