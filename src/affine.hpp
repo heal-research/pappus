@@ -46,6 +46,7 @@ public:
         : context_(context)
         , center_(v)
         , radius_(0)
+        , length_(0)
     {
     }
 

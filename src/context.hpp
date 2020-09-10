@@ -9,7 +9,7 @@ namespace pappus {
 
 class affine_form; // forward declaration
 
-enum approximation_mode {
+enum class approximation_mode : int {
     CHEBYSHEV, // (default)
     MINRANGE,
     SECANT
@@ -40,7 +40,7 @@ public:
         return ++last_index_;
     }
 
-    int approximation_mode() const
+    enum approximation_mode approximation_mode() const
     {
         return approximation_mode_;
     }

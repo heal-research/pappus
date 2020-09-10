@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <numeric>
 #include <optional>
 
 namespace pappus {
@@ -211,8 +212,8 @@ affine_form affine_form::operator*(affine_form const& other) const
 
     std::vector<double> dev(idx.size());
 
-    double common_center = 0; // common term center
-    double common_deviation = 0; // common term deviation
+    double common_term_center = 0; // common term center
+    double common_term_deviation = 0; // common term deviation
 
     auto c1 = center_;
     auto c2 = other.center_;
@@ -233,32 +234,36 @@ affine_form affine_form::operator*(affine_form const& other) const
             continue;
         }
 
-        auto x1 = indices_[i];
-        auto x2 = other.indices_[j];
-
         auto d1 = deviations_[i];
         auto d2 = other.deviations_[j];
 
         dev[k] = c1 * d2 + c2 * d1;
-        common_center += d1 * d2;
-        common_deviation += std::fabs(d1 * d2);
+        common_term_center += d1 * d2;
+        common_term_deviation += std::fabs(d1 * d2);
 
         ++i;
         ++j;
     }
 
-    common_center /= 2;
-    common_deviation /= 2;
+    common_term_center /= 2;
+    common_term_deviation /= 2;
 
     auto delta = r1 * r2;
 
     // increment global index
     idx.push_back(context().increment_last());
 
-    // TODO: research/implement SECANT approximation type
-    dev.push_back(delta - common_deviation);
-
-    return affine_form(context(), c1 * c2 + common_center, dev, idx, idx.size());
+    if (context().approximation_mode() == approximation_mode::SECANT) {
+        delta -= common_term_deviation;
+        dev.push_back(0.0);
+        auto r = eigen_array(dev).abs().sum();
+        double fac = r < EPS ? 1.0 : 1.0 + delta / r;
+        eigen_array(dev) *= fac;
+    } else {
+        // TODO: research/implement SECANT approximation type
+        dev.push_back(delta - common_term_deviation);
+    }
+    return affine_form(context(), c1 * c2 + common_term_center, dev, idx, idx.size());
 }
 
 affine_form affine_form::operator/(affine_form const& other) const
@@ -310,7 +315,9 @@ affine_form affine_form::inv() const
     auto fa = 1 / a;
     auto fb = 1 / b;
 
-    double alpha, delta, dzeta;
+    double alpha = 0;
+    double delta = 0;
+    double dzeta = 0;
 
     switch (context().approximation_mode()) {
     case approximation_mode::CHEBYSHEV: {
