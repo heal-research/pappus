@@ -2,8 +2,8 @@
 
 #include <algorithm>
 #include <cmath>
-#include <execution>
 #include <functional>
+#include <optional>
 
 namespace pappus {
 

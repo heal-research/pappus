@@ -1,12 +1,16 @@
 #ifndef PAPPUS_INTERVAL_HPP
 #define PAPPUS_INTERVAL_HPP
 
+#ifndef M_PI
+#define M_PI 3.14159265358979323846 // pi
+#endif
+
 #include <cassert>
-#include <cmath>
 #include <cfenv>
+#include <cmath>
 #include <iostream>
-#include <ostream>
 #include <limits>
+#include <ostream>
 #include <utility>
 
 namespace pappus {
@@ -38,9 +42,9 @@ public:
 
     void set_bounds(double lower, double upper)
     {
-        auto checked = check_bounds(lower, upper);
-        lower_ = lower;
-        upper_ = upper;
+        auto [lo, up] = check_bounds(lower, upper);
+        lower_ = lo;
+        upper_ = up;
     };
 
     void set_bounds(std::pair<double, double> bounds)
@@ -88,7 +92,7 @@ public:
         return std::fmax(l, u);
     }
 
-    affine_interval minimal_periodic(const affine_interval& interval) 
+    affine_interval minimal_periodic(const affine_interval& interval)
     {
         auto [a, b] = interval.bounds();
 
@@ -109,7 +113,7 @@ public:
         return s;
     }
 
-    bool operator==(affine_interval const& other) const 
+    bool operator==(affine_interval const& other) const
     {
         auto eps = std::numeric_limits<double>::epsilon();
         auto l = std::fabs(lower_ - other.lower_);
@@ -140,4 +144,3 @@ private:
 }
 
 #endif
-

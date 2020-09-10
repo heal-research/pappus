@@ -8,7 +8,7 @@ project(pappus_proj
 
 FetchContent_Declare(
     aaflib
-    GIT_REPOSITORY git@github.com:foolnotion/aaflib.git 
+    GIT_REPOSITORY https://github.com/foolnotion/aaflib.git
     GIT_TAG master
     DOWNLOAD_DIR ${PROJECT_SOURCE_DIR}/thirdparty/aaflib
     SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/aaflib
