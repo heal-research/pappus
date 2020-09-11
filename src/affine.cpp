@@ -3,47 +3,10 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
-#include <numeric>
 #include <optional>
 
 namespace pappus {
 
-constexpr double EPS = std::numeric_limits<double>::epsilon();
-constexpr double AAF_MINRAD = 1e-10;
-
-namespace detail {
-    enum opcode { add,
-        multiply };
-
-    template <opcode x = opcode::add>
-    struct binary_op {
-        template <typename T, typename U>
-        auto operator()(T t, U u) { return t + u; }
-    };
-
-    template <>
-    struct binary_op<opcode::multiply> {
-        template <typename T, typename U>
-        auto operator()(T t, U u) { return t * u; }
-    };
-
-    template <typename OP>
-    std::optional<affine_form> handle_special_cases(affine_form const& lhs, affine_form const& rhs)
-    {
-        if (lhs.length() == 0 && rhs.length() == 0) {
-            return affine_form(lhs.context(), OP()(lhs.center(), rhs.center()));
-        }
-
-        if (lhs.length() == 0) {
-            return OP()(rhs, lhs.center());
-        }
-
-        if (rhs.length() == 0) {
-            return OP()(lhs, rhs.center());
-        }
-        return std::nullopt;
-    }
-}
 
 bool affine_form::operator==(affine_form const& other) const
 {
@@ -58,7 +21,7 @@ bool affine_form::operator==(affine_form const& other) const
         if (!(a < 1 && b < 1)) {
             c /= (a + b);
         }
-        return c > EPS;
+        return c > limits::eps;
     };
 
     // no equivalence if the central value is not equal
@@ -137,7 +100,7 @@ affine_form& affine_form::operator-=(double v)
 
 affine_form& affine_form::operator*=(double v)
 {
-    eigen_array(deviations_) *= v;
+    view::as_array(deviations_) *= v;
     center_ *= v;
     radius_ *= std::fabs(v);
     return *this;
@@ -157,8 +120,8 @@ affine_form affine_form::operator-() const
 
 affine_form affine_form::operator+(affine_form const& other) const
 {
-    using op = detail::binary_op<detail::opcode::add>;
-    if (auto res = detail::handle_special_cases<op>(*this, other); res.has_value()) {
+    using op = binary_op<opcode::add>;
+    if (auto res = affine_form::handle_special_cases<op>(*this, other); res.has_value()) {
         return res.value();
     }
 
@@ -198,8 +161,8 @@ affine_form affine_form::operator-(affine_form const& other) const
 
 affine_form affine_form::operator*(affine_form const& other) const
 {
-    using op = detail::binary_op<detail::opcode::multiply>;
-    if (auto res = detail::handle_special_cases<op>(*this, other); res.has_value()) {
+    using op = binary_op<opcode::multiply>;
+    if (auto res = handle_special_cases<op>(*this, other); res.has_value()) {
         return res.value();
     }
 
@@ -256,9 +219,9 @@ affine_form affine_form::operator*(affine_form const& other) const
     if (context().approximation_mode() == approximation_mode::SECANT) {
         delta -= common_term_deviation;
         dev.push_back(0.0);
-        auto r = eigen_array(dev).abs().sum();
-        double fac = r < EPS ? 1.0 : 1.0 + delta / r;
-        eigen_array(dev) *= fac;
+        auto r = view::as_array(dev).abs().sum();
+        double fac = r < limits::eps ? 1.0 : 1.0 + delta / r;
+        view::as_array(dev) *= fac;
     } else {
         // TODO: research/implement SECANT approximation type
         dev.push_back(delta - common_term_deviation);
@@ -310,7 +273,7 @@ affine_form affine_form::inv() const
     auto b = c + r;
 
     // protect against division by zero
-    assert(a > EPS && b > EPS);
+    assert(a > limits::eps && b > limits::eps);
 
     auto fa = 1 / a;
     auto fb = 1 / b;
@@ -355,7 +318,7 @@ affine_form affine_form::inv() const
         break;
     }
     case approximation_mode::SECANT: {
-        if (r > AAF_MINRAD) {
+        if (r > limits::minrad) {
             alpha = (fb - fa) / (b - a);
         } else {
             alpha = -fa * fb;
@@ -370,8 +333,8 @@ affine_form affine_form::inv() const
     std::vector<double> dev(length_ + 1);
 
     // zi = alpha * xi
-    eigen_array(idx).segment(0, length_) = eigen_array(indices_).segment(0, length_);
-    eigen_array(dev).segment(0, length_) = eigen_array(deviations_).segment(0, length_) * alpha;
+    view::as_array(idx).segment(0, length_) = view::as_array(indices_).segment(0, length_);
+    view::as_array(dev).segment(0, length_) = view::as_array(deviations_).segment(0, length_) * alpha;
 
     // compute the error in a new deviation symbol zk = delta
     idx[length_] = context().increment_last();

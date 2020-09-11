@@ -13,18 +13,40 @@ namespace pappus {
 template <typename T>
 using array = Eigen::Array<T, Eigen::Dynamic, 1>;
 
-namespace {
-template<typename T>
-static auto eigen_array(std::vector<T> const& vec)
-{
-    return Eigen::Map<const array<T>>(vec.data(), vec.size());
-}
+struct view {
+    template <typename T>
+    static auto as_array(std::vector<T> const& vec)
+    {
+        return Eigen::Map<const array<T>>(vec.data(), vec.size());
+    }
 
-template<typename T>
-static auto eigen_array(std::vector<T>& vec)
-{
-    return Eigen::Map<array<T>>(vec.data(), vec.size());
-}
+    template <typename T>
+    static auto as_array(std::vector<T>& vec)
+    {
+        return Eigen::Map<array<T>>(vec.data(), vec.size());
+    }
+};
+
+struct limits {
+    static constexpr double eps = std::numeric_limits<double>::epsilon();
+    static constexpr double minrad = 1e-10;
+};
+
+namespace {
+    enum opcode { add,
+        multiply };
+
+    template <opcode x = opcode::add>
+    struct binary_op {
+        template <typename T, typename U>
+        auto operator()(T t, U u) { return t + u; }
+    };
+
+    template <>
+    struct binary_op<opcode::multiply> {
+        template <typename T, typename U>
+        auto operator()(T t, U u) { return t * u; }
+    };
 }
 
 class affine_form {
@@ -72,13 +94,30 @@ public:
     {
     }
 
-    void swap(affine_form& other) 
+    void swap(affine_form& other)
     {
         std::swap(center_, other.center_);
         std::swap(radius_, other.radius_);
         std::swap(length_, other.length_);
         deviations_.swap(other.deviations_);
         indices_.swap(other.indices_);
+    }
+
+    template <typename OP>
+    static std::optional<affine_form> handle_special_cases(affine_form const& lhs, affine_form const& rhs)
+    {
+        if (lhs.length() == 0 && rhs.length() == 0) {
+            return affine_form(lhs.context(), OP()(lhs.center(), rhs.center()));
+        }
+
+        if (lhs.length() == 0) {
+            return OP()(rhs, lhs.center());
+        }
+
+        if (rhs.length() == 0) {
+            return OP()(lhs, rhs.center());
+        }
+        return std::nullopt;
     }
 
     affine_context& context() const { return context_.get(); }
@@ -99,18 +138,17 @@ public:
         auto min_ = min();
         auto max_ = max();
 
-        auto abs_min_ = std::fabs(min_);
-        auto abs_max_ = std::fabs(max_);
+        if (std::signbit(min_) == std::signbit(max_))
+            return std::fmin(std::fabs(min_),
+                             std::fabs(max_));
 
-        return std::signbit(min_) == std::signbit(max_)
-            ? std::fmin(abs_min_, abs_max_)
-            : 0;
+        return 0;
     }
 
     size_t size() const { return indices_.size(); }
 
     size_t length() const { return length_; }
-    size_t last_index() const { return indices_[length_-1]; }
+    size_t last_index() const { return indices_[length_ - 1]; }
 
     // comparison operators
     bool operator<(const affine_form& other)
@@ -173,37 +211,36 @@ public:
 
     // friends
     friend affine_form operator+(double v, affine_form const& af) { return af + v; }
-    friend affine_form operator-(double v, affine_form const& af) { return af - v; }
+    friend affine_form operator-(double v, affine_form const& af) { return -af + v; }
     friend affine_form operator*(double v, affine_form const& af) { return af * v; }
-    friend affine_form operator/(double v, affine_form const& af) { return af / v; }
+    friend affine_form operator/(double v, affine_form const& af) { return af.inv() * v; }
 
     friend std::ostream& operator<<(std::ostream& s, affine_form& af)
     {
         s << "-------------------\n";
         s << "center: " << af.center_ << "\n";
         s << "radius: " << af.radius_ << "\n";
-        s << "deviations: " << eigen_array(af.deviations_).transpose() << "\n";
-        s << "indices: " << eigen_array(af.indices_).transpose() << "\n";
+        s << "deviations: " << view::as_array(af.deviations_).transpose() << "\n";
+        s << "indices: " << view::as_array(af.indices_).transpose() << "\n";
         s << "length: " << af.length_ << "\n";
         s << "-------------------\n";
         return s;
     }
 
-private : 
-std::reference_wrapper<affine_context> context_;
-double center_; // central value
-double radius_; // affine radius
+private:
+    std::reference_wrapper<affine_context> context_;
+    double center_; // central value
+    double radius_; // affine radius
 
-std::vector<double> deviations_; // vector of partial deviations
-std::vector<size_t> indices_; // vector of indices
+    std::vector<double> deviations_; // vector of partial deviations
+    std::vector<size_t> indices_; // vector of indices
 
-size_t length_; // the actual number of indices still in use by this affine form
+    size_t length_; // the actual number of indices still in use by this affine form
 
-void update_radius()
-{
-    radius_ = eigen_array(deviations_).segment(0, length_).abs().sum();
-}
-
+    void update_radius()
+    {
+        radius_ = view::as_array(deviations_).segment(0, length_).abs().sum();
+    }
 };
 
 } // namespace pappus
