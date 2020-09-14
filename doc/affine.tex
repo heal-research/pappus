@@ -1,0 +1,238 @@
+\documentclass[12pt]{scrartcl} % document type and language
+
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{microtype}
+\usepackage{amsmath}
+\usepackage[ruled,linesnumbered,vlined]{algorithm2e}
+\usepackage{hyperref}
+\usepackage{cleveref}
+
+\title{Affine Arithmetic}
+
+
+\begin{document}
+
+\maketitle
+
+\section{Introduction}
+
+In affine arithmetic, a quantity $x$ is represented as the following affine form:
+
+\begin{align}
+    x = x_0 + x_1 \epsilon_1 + ... + x_n \epsilon_n
+\end{align}
+
+where $\epsilon_1, ..., \epsilon_n$ are symbolic real variables whose values are unknown but assumed to lie in $[-1, 1]$. Note that the number $n$ changes during the calculation.
+
+In the case of a multivariate function $f=(x_1,...,x_m)$ the following affine forms are initialized:
+
+\begin{align}
+    x_1 &= \frac{\overline{x}_1 + \underline{x}_1}{2} +  \frac{\overline{x}_1 - \underline{x}_1}{2} \epsilon_1\\
+    \vdots\\
+    x_m &= \frac{\overline{x}_m + \underline{x}_m}{2} +  \frac{\overline{x}_m - \underline{x}_m}{2} \epsilon_m\\
+\end{align}
+
+where $[\underline{x}_k, \overline{x}_k]$ is the domain of variable $x_k$.
+
+An affine form can be converted to an interval using the formula:
+
+\begin{align}
+    [x_0 - \Delta, x_0 + \Delta], \Delta = \sum_{i=1}^n |x_i|
+\end{align}
+
+Let $I(x)$ be the conversion of an affine form to a corresponding standard interval.
+
+For two affine forms, $x = x_0 + \sum_{i=1}^n x_i \epsilon_i$ and $y = y_0 + \sum_{i=1}^n y_i \epsilon_i$ the following linear operations are defined:
+
+\begin{align}
+    x \pm y &= (x_0 \pm y_0) + \sum_{i=1}^n (x_i \pm y_i) \epsilon_i\\
+    x \pm \alpha &= (x_0 \pm \alpha) + \sum_{i=1}^n x_i \epsilon_i\\
+    \alpha x &= (\alpha x_0) + \sum_{i=1}^n (\alpha x_i)
+\end{align}
+
+A nonlinear function $f(x)$ of an affine form is generally not able to be represented directly as an affine form. We must therefore consider a linear approximation of $f$ and a representation of the approximation error by introducing a new noise symbol $\epsilon_{n+1}$.
+
+Let $X = I(x)$ be the range of $x$. For a nonlinear function $f(x)$, a linear approximation in the form $ax + b$ will have a maximum approximation error $\delta$:
+
+\begin{align}
+    \delta = \max_{x \in X} | f(x) - (ax + b) |
+\end{align}
+
+The result of the nonlinear operation can then be represented as follows:
+
+\begin{align}
+    f(x) &= ax + b + \delta \epsilon_{n+1}\\
+         &= a(x_0 + x_1 \epsilon_1 + ... + x_n \epsilon_n) + b + \delta \epsilon_{n+1}
+\end{align}
+
+Nonlinear binomial operations are calculated similarly.
+
+\section{Minima and maxima of multivariate functions}
+
+
+Without loss of generality, we consider finding maxima of a two-dimensional function $f(x_1, x_2)$ in the box $X^{(0)} = (X_1^{(0)}, X_2^{(0)}) = ([\underline{X_1^{(0)}}, \overline{X_1^{(0)}}], [\underline{X_2^{(0)}}, \overline{X_2^{(0)}}])$.
+
+\subsection{Notation}
+
+For an interval $J$, let the center and the width of $J$ be $c(J)$ and $w(J)$, respectively.
+
+For a box $X$, let $F_A(X)$ be the range boundary of $f$ in $X$ obtained by applying \emph{AA} and let the upper bound of $I(F_A(X))$ be $\overline{F_A(X)}$.
+
+\subsection{Algorithm}
+
+\begin{algorithm}
+    \caption{Algorithm for computing maxima of multivariate function (part 1)}\label{alg:minima-maxima-p1}
+    \KwData{$f(\mathbf{x})$, $X$ (domain of $f$), stopping criteria $\epsilon_r, \epsilon_b$}
+    \KwResult{Maxima (minima) of $f$}
+    
+    \tcp{Step 1}
+    Initialize lists $\mathcal{S}$ and $\mathcal{T}$ for storing boxes and range boundaries:\\
+    $\mathcal{S} \gets \emptyset$\;
+    $\mathcal{T} \gets \emptyset$\;
+    
+    \tcp{Step 2}
+    \uIf{$w(X_1^{(0)}) < w(X_2^{(0)})$}{
+        Divide $X^{(0)}$ into:
+        \begin{align}
+            X^{(1)} &=([\underline{X_1^{(0)}}, \overline{X_1^{(0)}}], [\underline{X_2^{(0)}}, c(X_2^{(0)})])\text{ and}\\
+            X^{(2)} &=([\underline{X_1^{(0)}}, \overline{X_1^{(0)}}], [c(X_2^{(0)}), \overline{X_2^{(0)}}])
+        \end{align}
+    }\Else{
+        Divide $X^{(0)}$ into:
+        \begin{align}
+            X^{(1)} &=([\underline{X_1^{(0)}}, c(X_1^{(0)})], [\underline{X_2^{(0)}}, \overline{X_2^{(0)}}])\text{ and}\\
+            X^{(2)} &=([c(X_1^{(0)}), \overline{X_1^{(0)}}], [\underline{X_2^{(0)}}, \overline{X_2^{(0)}}])
+        \end{align}
+    }
+
+    \tcp{Step 3}
+    Calculate $F_A(X^{(1)})$ and $F_A(X^{(2)})$, then calculate $\underline{f_{\max}^{(1)}}$ and $\underline{f_{\max}^{(2)}}$ (use \cref{alg:algorithm-1}). The lower bound of the maxima is then given as $\underline{f_{\max}} = \max(\underline{f^{(1)}_{\max}}, \underline{f^{(2)}_{\max})}$.
+    
+    \tcp{Step 4}
+    \uIf{$\overline{F_A(X^{(1)})} < \underline{f_{\max}}$}{
+        Insert $X^{(2)}$ and $F_A(X^{(2)})$ into $\mathcal{S}$ and discard $X^{(1)}$.
+    }
+    \uElseIf{$\overline{F_A(X^{(2)})} < \underline{f_{\max}}$}{
+        Insert $X^{(1)}$ and $F_A(X^{(1)})$ into $\mathcal{S}$ and discard $X^{(2)}$.
+    }
+    \Else{
+        Insert $X^{(1)}$, $F_A(X^{(1)})$, $X^{(2)}$, $F_A(X^{(2)})$ into $\mathcal{S}$.
+    }
+\end{algorithm}
+
+\begin{algorithm}
+    \caption{Algorithm for computing maxima of multivariate function (part 2)}\label{alg:minima-maxima-p2}
+    \KwData{$f(\mathbf{x})$, $X$ (domain of $f$), stopping criteria $\epsilon_r, \epsilon_b$}
+    \KwResult{Maxima (minima) of $f$}
+
+    \tcp{Step 5}
+    \While{$\mathcal{S} \neq \emptyset$}{
+        %\tcp{5.1}
+        Find the box $X^{(i)} \in \mathcal{S}$ for which $F_A(X^{(i)})$ is largest.
+        \begin{align}
+            X^{(i)} = \arg\max_i \left( F_A(X^{(i)}) \right)
+        \end{align}\\
+        %$X_{current} \gets X^{(i)}$\\
+        Remove $X^{(i)}$ from $\mathcal{S}$.\\
+        Select $X^{(i)}$ and $F_A(X^{(i)})$ as the box and range to be processed.\\
+        %\tcp{5.2}
+        Calculate $\underline{f_{\max}^{(i)}}$ (the candidates of $\underline{f_{\max}}$) by utilizing $X^{(i)}$ and $F_A(X^{(i)})$ and by applying \cref{alg:algorithm-1}. 
+        Update $\underline{f_{\max}}=\max\{{\underline{f_{\max}^{(i)}}}\}$.\\
+        %\tcp{5.3}
+        Discard any box $X$ and range boundary $F_A(X)$ from $\mathcal{S}$ and $\mathcal{T}$ for which $\overline{F_A(X)} < \underline{f_{\max}}$.\\
+        %\tcp{5.4}
+        Narrow $X^{(i)}$ down by utilizing $X^{(i)}, F_A(X^{(i)})$ and $\underline{f_{\max}}$ using \cref{alg:algorithm-2}.\\
+        %\tcp{5.5}
+        \uIf{$w(X_1^{(i)}) < w(X_2^{(i)})$}{
+            Divide $X^{(i)}$ into:
+            \begin{align}
+                X^{(j)} &=([\underline{X_1^{(i)}}, \overline{X_1^{(i)}}], [\underline{X_2^{(i)}}, c(X_2^{(i)})])\text{ and}\\
+                X^{(k)} &=([\underline{X_1^{(i)}}, \overline{X_1^{(i)}}], [c(X_2^{(i)}), \overline{X_2^{(i)}}])
+            \end{align}
+        }\Else{
+            Divide $X^{(i)}$ into:
+            \begin{align}
+                X^{(j)} &=([\underline{X_1^{(i)}}, c(X_1^{(i)})], [\underline{X_2^{(i)}}, \overline{X_2^{(i)}}])\text{ and}\\
+                X^{(k)} &=([c(X_1^{(i)}), \overline{X_1^{(i)}}], [\underline{X_2^{(i)}}, \overline{X_2^{(i)}}])
+            \end{align}
+        }
+        %\tcp{5.6}
+        Calculate $F_A(X^{(j)})$ and $F_A(X^{(k)})$.\\
+        \uIf{$\max_{1 \leq h \leq m} w(X_h^{(j)}) < \epsilon_r$ \textbf{and} $w(I(F_A(X^{(j)}))) < \epsilon_b$}{
+            Insert $X^{(j)}$ and $F_A(X^{(j)})$ into $\mathcal{T}$.
+        }\Else{
+            Insert $X^{(j)}$ and $F_A(X^{(j)})$ into $\mathcal{S}$.
+        }
+        \uIf{$\max_{1 \leq h \leq m} w(X_h^{(k)}) < \epsilon_r$ \textbf{and} $w(I(F_A(X^{(k)}))) < \epsilon_b$}{
+            Insert $X^{(k)}$ and $F_A(X^{(k)})$ into $\mathcal{T}$.
+        }\Else{
+            Insert $X^{(k)}$ and $F_A(X^{(k)})$ into $\mathcal{S}$.
+        }
+    }
+    \tcp{Step 6}
+    Group together boxes in $\mathcal{T}$ that share a common point. Let $Y^{(1)},...,Y^{(l)}$ be one such group. Then, the maxima is given by $\cup_{h=1}^l I(F_A(Y^{(h)}))$, with corresponding point $\cup_{h=1}^l Y^{(h)}$. Repeat for all groups.
+\end{algorithm}
+    
+
+\begin{algorithm}
+    \caption{Algorithm 1}\label{alg:algorithm-1}
+    \tcp{Compared to Fujii's method, this algorithm is able to calculate candidates bounding $f_{\max}$ more closely, therefore this allows to discard more subregions (boxes) in the initial stage.}
+
+    Suppose $F_A(X)$ is calculated as follows:
+    \begin{align}
+        F_A(X) = a_0 + a_1 \epsilon_1 + ... + a_m + a_{m+1} + ... + a_n \epsilon_n\label{eq:fa}
+    \end{align}
+    Let the point (vector) $y=(y_1, ..., y_m)$ be as follows:
+    \begin{align}
+        y_i = 
+        \begin{cases}
+            \overline{X_i} & 0 < a_i\\
+            \underline{X_i} & a_i < 0\\
+            c(X_i) & \text{otherwise}.
+        \end{cases}
+        & (i=1,...,m)\\
+    \end{align}
+    Then, the candidate for $\underline{f_{\max}}$ is calculated as $f(y)$.
+\end{algorithm}
+
+\begin{algorithm}
+    \caption{Algorithm 2}\label{alg:algorithm-2}
+    Calculate $F_A(X)$ using \Cref{eq:fa}.\\
+    Calculate
+    \begin{align}
+        \alpha = \sum_{i=m+1}^n |a_i|
+    \end{align}\\
+    \ForAll{$i=1,...,m$}{
+        \uIf{$a_i \neq 0$}{
+            Apply IA (interval arithmetic) as follows:
+            \begin{align}
+                \varepsilon_i^* = \frac{1}{a_i}\left(f_{\max} - a_0 - \alpha - \sum_{j=1,j \neq i}^m(a_j \times [-1, 1]) \right)
+            \end{align}
+        }\Else{
+            Let $\varepsilon_i^* = [-1, 1]$.
+        }
+        Narrow $X_i$ down as follows:
+        \uIf{$\varepsilon_i^* \in [-1, 1]$}{
+            \begin{align}
+                X_i = \begin{cases}
+                [\underline{X_i} + r(X_i)(\underline{\varepsilon_i^*}+1), \overline{X_i}] & 0 < a_i\\
+                    [\underline{X_i}, \overline{X_i} - r(X_i)(1-\overline{\varepsilon_i^*})] & a_i < 0\\
+                \end{cases} & \text{ where } r(X_i) = \frac{\overline{X_i} - \underline{X_i}}{2}
+            \end{align}
+        }\uElseIf{$\underline{\varepsilon_i^*} \leq -1$ \textbf{and} $\overline{\varepsilon_i^*} \in [-1, 1)$ \textbf{and} $a_i < 0$}{
+            \begin{align}
+                X_i = [\underline{X_i}, \overline{X_i} - r(X_i)(1-\overline{\varepsilon_i^*})]
+            \end{align}
+        }\uElseIf{$\underline{\varepsilon_i^*} \in (-1, 1]$ \textbf{and} $1 \leq \overline{\varepsilon_i^*}$ \textbf{and} $0 < a_i$}{
+            \begin{align}
+                X_i = [\underline{X_i} + r(X_i)(\underline{\varepsilon_i^*} + 1), \overline{X_i}]
+            \end{align}
+        }\Else{
+            We are not able to narrow $X_i$ down.
+        }
+    }
+\end{algorithm}
+
+\end{document}
