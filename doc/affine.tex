@@ -1,18 +1,30 @@
-\documentclass[12pt]{scrartcl} % document type and language
+\documentclass[fontsize=12pt,a4paper]{scrartcl} % document type and language
 
-\usepackage[T1]{fontenc}
 \usepackage[utf8]{inputenc}
-\usepackage{lmodern}
 \usepackage{microtype}
 \usepackage{amsmath}
+\usepackage{lmodern}
+\usepackage[proportional,scaled=1.064]{erewhon}
+\usepackage[erewhon,vvarbb,bigdelims]{newtxmath}
+\usepackage[T1]{fontenc}
 \usepackage[ruled,linesnumbered,vlined]{algorithm2e}
 \usepackage{hyperref}
 \usepackage{cleveref}
 
+\usepackage[margin=2cm]{geometry}
+
+\setlength{\parindent}{0em}
+\setlength{\parskip}{0.5em}
+\renewcommand{\baselinestretch}{1.05}
+
 \title{Affine Arithmetic}
+
+\author{Bogdan Burlacu}
 
 
 \begin{document}
+
+%\titlehead{University of Applied Sciences Upper Austria, Josef Ressel Centre for Symbolic Regression}
 
 \maketitle
 
@@ -39,10 +51,12 @@ where $[\underline{x}_k, \overline{x}_k]$ is the domain of variable $x_k$.
 An affine form can be converted to an interval using the formula:
 
 \begin{align}
-    [x_0 - \Delta, x_0 + \Delta], \Delta = \sum_{i=1}^n |x_i|
+    I(x) &= [x_0 - \Delta, x_0 + \Delta] & \text{where } \Delta = \sum_{i=1}^n |x_i|
 \end{align}
 
-Let $I(x)$ be the conversion of an affine form to a corresponding standard interval.
+%Let $I(x)$ be the conversion of an affine form to a corresponding standard interval.
+
+\subsection{Linear operations}
 
 For two affine forms, $x = x_0 + \sum_{i=1}^n x_i \epsilon_i$ and $y = y_0 + \sum_{i=1}^n y_i \epsilon_i$ the following linear operations are defined:
 
@@ -71,16 +85,26 @@ Nonlinear binomial operations are calculated similarly.
 
 \section{Minima and maxima of multivariate functions}
 
+We consider a multivariate nonlinear function
+\begin{align}
+    y = f(x_1, ..., x_m)
+\end{align}
+
+The domain of this function is the $m$-dimensional region (the box):
+\begin{align}
+    X^{(0)} &= \left( X_1^{(0)}, ..., X_m^{(0)}  \right)\\
+            &= \left( [\underline{X_1^{(0)}}, \overline{X_1^{(0)}}], ..., [\underline{X_m^{(0)}}, \overline{X_m^{(0)}}] \right)
+\end{align}
+
+One of the first methods to calculate the bounds of the codomain of $f$ is Fujii's method, in which the maxima and minima are calculated with guaranteed accuracy by means of recursively dividing $X$ into subregions and applying interval arithmetic (IA) to bound the range of $f$ in each region. The method discards the subregions that are guaranteed not to contain the point corresponding to the minimum (maximum) value. 
+
+\subsection{Miyajima and Kashiwagi's method}
 
 Without loss of generality, we consider finding maxima of a two-dimensional function $f(x_1, x_2)$ in the box $X^{(0)} = (X_1^{(0)}, X_2^{(0)}) = ([\underline{X_1^{(0)}}, \overline{X_1^{(0)}}], [\underline{X_2^{(0)}}, \overline{X_2^{(0)}}])$.
-
-\subsection{Notation}
 
 For an interval $J$, let the center and the width of $J$ be $c(J)$ and $w(J)$, respectively.
 
 For a box $X$, let $F_A(X)$ be the range boundary of $f$ in $X$ obtained by applying \emph{AA} and let the upper bound of $I(F_A(X))$ be $\overline{F_A(X)}$.
-
-\subsection{Algorithm}
 
 \begin{algorithm}
     \caption{Algorithm for computing maxima of multivariate function (part 1)}\label{alg:minima-maxima-p1}
@@ -92,19 +116,17 @@ For a box $X$, let $F_A(X)$ be the range boundary of $f$ in $X$ obtained by appl
     $\mathcal{S} \gets \emptyset$\;
     $\mathcal{T} \gets \emptyset$\;
     
-    \tcp{Step 2}
+    \tcp{Step 2: divide $X^{(0)}$ into subregions $X^{(1)}$ and $X^{(2)}$}
     \uIf{$w(X_1^{(0)}) < w(X_2^{(0)})$}{
-        Divide $X^{(0)}$ into:
-        \begin{align}
-            X^{(1)} &=([\underline{X_1^{(0)}}, \overline{X_1^{(0)}}], [\underline{X_2^{(0)}}, c(X_2^{(0)})])\text{ and}\\
+        $\begin{aligned}
+            X^{(1)} &=([\underline{X_1^{(0)}}, \overline{X_1^{(0)}}], [\underline{X_2^{(0)}}, c(X_2^{(0)})])\\
             X^{(2)} &=([\underline{X_1^{(0)}}, \overline{X_1^{(0)}}], [c(X_2^{(0)}), \overline{X_2^{(0)}}])
-        \end{align}
+        \end{aligned}$
     }\Else{
-        Divide $X^{(0)}$ into:
-        \begin{align}
-            X^{(1)} &=([\underline{X_1^{(0)}}, c(X_1^{(0)})], [\underline{X_2^{(0)}}, \overline{X_2^{(0)}}])\text{ and}\\
+        $\begin{aligned}
+            X^{(1)} &=([\underline{X_1^{(0)}}, c(X_1^{(0)})], [\underline{X_2^{(0)}}, \overline{X_2^{(0)}}])\\
             X^{(2)} &=([c(X_1^{(0)}), \overline{X_1^{(0)}}], [\underline{X_2^{(0)}}, \overline{X_2^{(0)}}])
-        \end{align}
+        \end{aligned}$
     }
 
     \tcp{Step 3}
@@ -130,10 +152,10 @@ For a box $X$, let $F_A(X)$ be the range boundary of $f$ in $X$ obtained by appl
     \tcp{Step 5}
     \While{$\mathcal{S} \neq \emptyset$}{
         %\tcp{5.1}
-        Find the box $X^{(i)} \in \mathcal{S}$ for which $F_A(X^{(i)})$ is largest.
-        \begin{align}
+        Find the box $X^{(i)} \in \mathcal{S}$ for which $F_A(X^{(i)})$ is largest.\\
+        \hspace{10em}$\begin{aligned}
             X^{(i)} = \arg\max_i \left( F_A(X^{(i)}) \right)
-        \end{align}\\
+        \end{aligned}$\\
         %$X_{current} \gets X^{(i)}$\\
         Remove $X^{(i)}$ from $\mathcal{S}$.\\
         Select $X^{(i)}$ and $F_A(X^{(i)})$ as the box and range to be processed.\\
@@ -143,20 +165,19 @@ For a box $X$, let $F_A(X)$ be the range boundary of $f$ in $X$ obtained by appl
         %\tcp{5.3}
         Discard any box $X$ and range boundary $F_A(X)$ from $\mathcal{S}$ and $\mathcal{T}$ for which $\overline{F_A(X)} < \underline{f_{\max}}$.\\
         %\tcp{5.4}
-        Narrow $X^{(i)}$ down by utilizing $X^{(i)}, F_A(X^{(i)})$ and $\underline{f_{\max}}$ using \cref{alg:algorithm-2}.\\
-        %\tcp{5.5}
+    Narrow $X^{(i)}$ down by utilizing $X^{(i)}, F_A(X^{(i)})$ and $\underline{f_{\max}}$ using \cref{alg:algorithm-2}.\\
+    %\tcp{5.5}
+        Divide $X^{(i)}$ into $X^{(j)}$ and $X^{(k)}$.\\
         \uIf{$w(X_1^{(i)}) < w(X_2^{(i)})$}{
-            Divide $X^{(i)}$ into:
-            \begin{align}
-                X^{(j)} &=([\underline{X_1^{(i)}}, \overline{X_1^{(i)}}], [\underline{X_2^{(i)}}, c(X_2^{(i)})])\text{ and}\\
+            \hspace{8em}$\begin{aligned}
+                X^{(j)} &=([\underline{X_1^{(i)}}, \overline{X_1^{(i)}}], [\underline{X_2^{(i)}}, c(X_2^{(i)})])\\
                 X^{(k)} &=([\underline{X_1^{(i)}}, \overline{X_1^{(i)}}], [c(X_2^{(i)}), \overline{X_2^{(i)}}])
-            \end{align}
+            \end{aligned}$
         }\Else{
-            Divide $X^{(i)}$ into:
-            \begin{align}
-                X^{(j)} &=([\underline{X_1^{(i)}}, c(X_1^{(i)})], [\underline{X_2^{(i)}}, \overline{X_2^{(i)}}])\text{ and}\\
+            \hspace{8em}$\begin{aligned}
+                X^{(j)} &=([\underline{X_1^{(i)}}, c(X_1^{(i)})], [\underline{X_2^{(i)}}, \overline{X_2^{(i)}}])\\
                 X^{(k)} &=([c(X_1^{(i)}), \overline{X_1^{(i)}}], [\underline{X_2^{(i)}}, \overline{X_2^{(i)}}])
-            \end{align}
+            \end{aligned}$
         }
         %\tcp{5.6}
         Calculate $F_A(X^{(j)})$ and $F_A(X^{(k)})$.\\
@@ -215,20 +236,20 @@ For a box $X$, let $F_A(X)$ be the range boundary of $f$ in $X$ obtained by appl
         }
         Narrow $X_i$ down as follows:
         \uIf{$\varepsilon_i^* \in [-1, 1]$}{
-            \begin{align}
+            \hspace{4em}$\begin{aligned}
                 X_i = \begin{cases}
                 [\underline{X_i} + r(X_i)(\underline{\varepsilon_i^*}+1), \overline{X_i}] & 0 < a_i\\
                     [\underline{X_i}, \overline{X_i} - r(X_i)(1-\overline{\varepsilon_i^*})] & a_i < 0\\
                 \end{cases} & \text{ where } r(X_i) = \frac{\overline{X_i} - \underline{X_i}}{2}
-            \end{align}
+            \end{aligned}$
         }\uElseIf{$\underline{\varepsilon_i^*} \leq -1$ \textbf{and} $\overline{\varepsilon_i^*} \in [-1, 1)$ \textbf{and} $a_i < 0$}{
-            \begin{align}
+            \hspace{4em}$\begin{aligned}
                 X_i = [\underline{X_i}, \overline{X_i} - r(X_i)(1-\overline{\varepsilon_i^*})]
-            \end{align}
+            \end{aligned}$
         }\uElseIf{$\underline{\varepsilon_i^*} \in (-1, 1]$ \textbf{and} $1 \leq \overline{\varepsilon_i^*}$ \textbf{and} $0 < a_i$}{
-            \begin{align}
+            \hspace{4em}$\begin{aligned}
                 X_i = [\underline{X_i} + r(X_i)(\underline{\varepsilon_i^*} + 1), \overline{X_i}]
-            \end{align}
+            \end{aligned}$
         }\Else{
             We are not able to narrow $X_i$ down.
         }
