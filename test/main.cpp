@@ -23,7 +23,7 @@ bool operator==(AAInterval const& lhs, ai const& rhs)
     return rhs == lhs;
 }
 
-TEST_CASE("operator+(af)")
+TEST_CASE("affine_form::operator+(af)")
 {
     // pappus
     ai u1(-2, 3);
@@ -46,7 +46,7 @@ TEST_CASE("operator+(af)")
     CHECK(z1.to_interval() == z2.convert());
 }
 
-TEST_CASE("operator+(double, af)")
+TEST_CASE("affine_form::operator+(double, af)")
 {
     ai u1(-2, 3);
     double v = 2;
@@ -63,7 +63,7 @@ TEST_CASE("operator+(double, af)")
     CHECK(z1.to_interval() == z2.convert());
 }
 
-TEST_CASE("operator+=(af)")
+TEST_CASE("affine_form::operator+=(af)")
 {
     // pappus
     ai u1(-2, 3);
@@ -79,7 +79,7 @@ TEST_CASE("operator+=(af)")
     CHECK(z1.to_interval() == x1.to_interval());
 }
 
-TEST_CASE("operator-(af)")
+TEST_CASE("affine_form::operator-(af)")
 {
     // pappus
     ai u1(-2, 3);
@@ -102,7 +102,7 @@ TEST_CASE("operator-(af)")
     CHECK(z1.to_interval() == z2.convert());
 }
 
-TEST_CASE("operator-(double, af)")
+TEST_CASE("affine_form::operator-(double, af)")
 {
     ai u1(-2, 3);
     double v = 2;
@@ -119,7 +119,7 @@ TEST_CASE("operator-(double, af)")
     CHECK(z1.to_interval() == z2.convert());
 }
 
-TEST_CASE("operator-=(af)")
+TEST_CASE("affine_form::operator-=(af)")
 {
     // pappus
     ai u1(-2, 3);
@@ -135,7 +135,7 @@ TEST_CASE("operator-=(af)")
     CHECK(z1.to_interval() == x1.to_interval());
 }
 
-TEST_CASE("operator*(af)")
+TEST_CASE("affine_form::operator*(af)")
 {
     ai u1(-2, 3);
     ai v1(-1, 1);
@@ -156,7 +156,7 @@ TEST_CASE("operator*(af)")
     CHECK(z1.to_interval() == z2.convert());
 }
 
-TEST_CASE("operator*(double, af)")
+TEST_CASE("affine_form::operator*(double, af)")
 {
     ai u1(-2, 3);
     double v = 2;
@@ -173,7 +173,7 @@ TEST_CASE("operator*(double, af)")
     CHECK(z1.to_interval() == z2.convert());
 }
 
-TEST_CASE("operator*=(af)")
+TEST_CASE("affine_form::operator*=(af)")
 {
     // pappus
     ai u1(-2, 3);
@@ -189,7 +189,7 @@ TEST_CASE("operator*=(af)")
     CHECK(z1.to_interval() == x1.to_interval());
 }
 
-TEST_CASE("operator/(af)")
+TEST_CASE("affine_form::operator/(af)")
 {
     ai u1(2, 3);
     ai v1(1.5, 2);
@@ -210,7 +210,7 @@ TEST_CASE("operator/(af)")
     CHECK(z1.to_interval() == z2.convert());
 }
 
-TEST_CASE("operator/(double, af)")
+TEST_CASE("affine_form::operator/(double, af)")
 {
     ai u1(2, 3);
     double v = 2;
@@ -227,7 +227,7 @@ TEST_CASE("operator/(double, af)")
     CHECK(z1.to_interval() == z2.convert());
 }
 
-TEST_CASE("affine_form.inv()")
+TEST_CASE("affine_form::inv()")
 {
     ai u1(1, 4);
     pappus::affine_context ctx;
@@ -237,6 +237,21 @@ TEST_CASE("affine_form.inv()")
     AAInterval u2(u1.lower(), u1.upper());
     AAF x2(u2);
     AAF y2 = inv(x2);
+
+    CHECK(y1.to_interval() == y2.convert());
+}
+
+TEST_CASE("affine_form::operator^(int)")
+{
+    ai u1(1, 4);
+    int exponent = 3;
+    pappus::affine_context ctx;
+    af x1(ctx, u1);
+    af y1 = x1 ^ exponent;
+
+    AAInterval u2(u1.lower(), u1.upper());
+    AAF x2(u2);
+    AAF y2 = x2 ^ exponent;
 
     CHECK(y1.to_interval() == y2.convert());
 }

@@ -37,7 +37,8 @@ public:
     // increase the highest symbol
     std::size_t increment_last()
     {
-        return ++last_index_;
+        ++last_index_;
+        return last_index_ - 1;
     }
 
     enum approximation_mode approximation_mode() const

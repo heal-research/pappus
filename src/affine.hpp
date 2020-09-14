@@ -4,9 +4,14 @@
 #include "context.hpp"
 #include "interval.hpp"
 
+#include <stdexcept>
 #include <vector>
 
 #include <Eigen/Eigen>
+
+#ifndef PROTECTED_DIVISION
+#define PROTECTED_DIVISION 1
+#endif
 
 namespace pappus {
 

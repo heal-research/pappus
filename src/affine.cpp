@@ -1,4 +1,5 @@
 #include "affine.hpp"
+#include "context.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -6,7 +7,6 @@
 #include <optional>
 
 namespace pappus {
-
 
 bool affine_form::operator==(affine_form const& other) const
 {
@@ -223,7 +223,6 @@ affine_form affine_form::operator*(affine_form const& other) const
         double fac = r < limits::eps ? 1.0 : 1.0 + delta / r;
         view::as_array(dev) *= fac;
     } else {
-        // TODO: research/implement SECANT approximation type
         dev.push_back(delta - common_term_deviation);
     }
     return affine_form(context(), c1 * c2 + common_term_center, dev, idx, idx.size());
@@ -272,10 +271,7 @@ affine_form affine_form::inv() const
     auto a = c - r;
     auto b = c + r;
 
-    // protect against division by zero
-    assert(a > limits::eps && b > limits::eps);
-
-    auto fa = 1 / a;
+    auto fa = 1 / a; 
     auto fb = 1 / b;
 
     double alpha = 0;
@@ -297,32 +293,29 @@ affine_form affine_form::inv() const
         break;
     }
     case approximation_mode::MINRANGE: {
-        double y_a, y_b;
+        double ya, yb;
         // Derivative of 1/x is -1/x*x
         if (a > 0.0) {
             alpha = -fb / b;
-            // y_a = fa - alpha*a;
-            // y_b = fb - alpha*b = 2.0*fb;
-            y_a = fa - alpha * a;
-            y_b = 2.0 * fb;
+            // ya = fa - alpha*a;
+            // yb = fb - alpha*b = 2.0*fb;
+            ya = fa - alpha * a;
+            yb = 2.0 * fb;
         } else {
             alpha = -fa / a;
-            // y_a = fa - alpha*a = 2.0*fa;
-            // y_b = fb - alpha*b;
-            y_a = 2.0 * fa;
-            y_b = fb - alpha * b;
+            // ya = fa - alpha*a = 2.0*fa;
+            // yb = fb - alpha*b;
+            ya = 2.0 * fa;
+            yb = fb - alpha * b;
         }
 
-        delta = 0.5 * (y_a - y_b);
-        dzeta = 0.5 * (y_a + y_b);
+        delta = 0.5 * (ya - yb);
+        dzeta = 0.5 * (ya + yb);
         break;
     }
     case approximation_mode::SECANT: {
-        if (r > limits::minrad) {
-            alpha = (fb - fa) / (b - a);
-        } else {
-            alpha = -fa * fb;
-        }
+        alpha = r > limits::minrad ? (fb - fa ) / (b - a) 
+                                   : -fa * fb;
         dzeta = fa - alpha * a;
         delta = 0;
         break;
@@ -337,6 +330,107 @@ affine_form affine_form::inv() const
     view::as_array(dev).segment(0, length_) = view::as_array(deviations_).segment(0, length_) * alpha;
 
     // compute the error in a new deviation symbol zk = delta
+    idx[length_] = context().increment_last();
+    dev[length_] = delta;
+
+    return affine_form(context(), alpha * c + dzeta, std::move(dev), std::move(idx), idx.size());
+}
+
+affine_form affine_form::operator^(int exponent) const
+{
+    if (length_ == 0)
+        return affine_form(context(), std::pow(center(), exponent));
+
+    if (exponent == 0)
+        return affine_form(context(), 1.0);
+
+    if (exponent == 1)
+        return *this;
+
+    if (exponent == -1)
+        return this->inv();
+
+    auto c = center();
+    auto r = radius();
+
+    auto a = c - r;
+    auto b = c + r;
+
+    auto fa = std::pow(a, exponent);
+    auto fb = std::pow(b, exponent);
+
+    double alpha = 0.0;
+
+    double delta;
+    double dzeta;
+
+    switch (context().approximation_mode()) {
+    case approximation_mode::CHEBYSHEV: {
+        alpha = r > limits::minrad ? (fb - fa) / (b - a)
+                                   : exponent * fa / a;
+
+        // we have two points having the slope alpha
+        auto e = std::fabs(alpha / exponent);
+        auto x1 = -std::pow(e, 1.0 / (exponent - 1.0));
+        auto x2 = -x1;
+
+        auto y1 = x1 < a ? fa - alpha * a
+                         : std::pow(x1, exponent) - alpha * x1;
+
+        auto y2 = x2 > b ? fb - alpha * b
+                         : std::pow(x2, exponent) - alpha * x2;
+
+        delta = (y1 - y2) * 0.5;
+        dzeta = (y1 + y2) * 0.5;
+        break;
+    }
+    case approximation_mode::MINRANGE: {
+        // special case: 0.0 in [a,b] : alpha = f'(0.0)
+        // exp > 0 and exp even and [a,b] > 0 : MINRANGE: alpha = f'(a), y0_b > y0_a : e1 = 1 e2 = 1 e3 = 1
+        // exp > 0 and exp odd  and [a,b] > 0 : MINRANGE: alpha = f'(a), y0_b > y0_a : e1 = 1 e2 = 0 e3 = 1
+        // exp > 0 and exp even and [a,b] < 0 : MINRANGE: alpha = f'(b), y0_a > y0_b : e1 = 1 e2 = 1 e3 = 0
+        // exp > 0 and exp odd  and [a,b] < 0 : MINRANGE: alpha = f'(b), y0_b > y0_a : e1 = 1 e2 = 0 e3 = 0
+        // exp < 0 and exp even and [a,b] > 0 : MINRANGE: alpha = f'(b), y0_a > y0_b : e1 = 0 e2 = 1 e3 = 1
+        // exp < 0 and exp odd  and [a,b] > 0 : MINRANGE: alpha = f'(b), y0_a > y0_b : e1 = 0 e2 = 0 e3 = 1
+        // exp < 0 and exp even and [a,b] < 0 : MINRANGE: alpha = f'(a), y0_b > y0_a : e1 = 0 e2 = 1 e3 = 0
+        // exp < 0 and exp odd  and [a,b] < 0 : MINRANGE: alpha = f'(a), y0_a > y0_b : e1 = 0 e2 = 0 e3 = 0
+        if (a * b < 0) {
+            alpha = 0.0;
+            if (exponent % 2 == 0) {
+                delta = 0.5 * std::max(fa, fb);
+                dzeta = delta;
+            } else {
+                delta = 0.5 * (fb - fa);
+                dzeta = 0.5 * (fb + fa);
+            }
+        } else {
+            alpha = std::signbit(a) == std::signbit(exponent) ? exponent * fa / a
+                                                              : exponent * fb / b;
+
+            auto ya = fa - alpha * a;
+            auto yb = fb - alpha * b;
+
+            delta = 0.5 * std::fabs(ya - yb);
+            dzeta = 0.5 * (fa + fb);
+        }
+        break;
+    }
+    case approximation_mode::SECANT: {
+        alpha = r > limits::minrad ? (fb - fa) / (b - a)
+                                   : exponent * fa / a;
+
+        delta = 0.0;
+        dzeta = fa - alpha * a;
+        break;
+    }
+    } // switch
+
+    std::vector<size_t> idx(length_ + 1);
+    std::vector<double> dev(length_ + 1);
+
+    view::as_array(idx).segment(0, length_) = view::as_array(indices_).segment(0, length_);
+    view::as_array(dev).segment(0, length_) = view::as_array(deviations_).segment(0, length_) * alpha;
+
     idx[length_] = context().increment_last();
     dev[length_] = delta;
 

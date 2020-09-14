@@ -14,17 +14,15 @@ pkgs.gcc10Stdenv.mkDerivation {
         # Project dependencies
         ccls # completion vim
         bear # generate compilation database
-        tbb
         # profiling and debugging
         gdb
         valgrind
         linuxPackages.perf
-        git
         cmake
         eigen
         doctest
         clang_10
         # visualize profile results
-        qcachegrind
+        # qcachegrind
       ];
     }
