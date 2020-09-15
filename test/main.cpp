@@ -294,6 +294,24 @@ TEST_CASE("affine_form::operator^(double)")
     CHECK(y1 == y2);
 }
 
+TEST_CASE("affine_form::operator^(af)")
+{
+    ai u1(1, 4);
+    pappus::affine_context ctx;
+    af x1(ctx, u1);
+
+    AAInterval u2(u1.lower(), u1.upper());
+    AAF x2(u2);
+
+    auto e1 = af(ctx, ai(2,3));
+    auto e2 = AAF(AAInterval(2,3));
+
+    af y1 = x1 ^ e1;
+    AAF y2 = x2 ^ e2;
+    CHECK(y1.to_interval() == y2.convert());
+    CHECK(y1 == y2);
+}
+
 /******************************************************
  * Arbitrary expressions tests                        *
  *****************************************************/

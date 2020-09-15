@@ -87,7 +87,7 @@ affine_form affine_form::operator/(affine_form const& other) const
     return *this * other.inv();
 }
 
-affine_form& affine_form::operator/=(affine_form const& other) 
+affine_form& affine_form::operator/=(affine_form const& other)
 {
     auto tmp = *this / other;
     swap(tmp);
@@ -272,7 +272,8 @@ affine_form affine_form::operator^(int exponent) const
     return affine_form(context(), alpha * c + dzeta, std::move(dev), std::move(idx), idx.size());
 }
 
-affine_form affine_form::operator^(double exponent) const {
+affine_form affine_form::operator^(double exponent) const
+{
     if (exponent == 1.0)
         return *this;
 
@@ -293,7 +294,8 @@ affine_form affine_form::operator^(double exponent) const {
         auto x2 = std::pow(beeta / exponent, 1 / (exponent - 1));
         alpha = 0.5 * (-beeta * (min() + x2) + fMin + std::pow(x2, exponent));
         gamma = 0.5 * (beeta * (x2 - min()) + fMin - std::pow(x2, exponent));
-        if (exponent_in_01) gamma = -gamma;
+        if (exponent_in_01)
+            gamma = -gamma;
     } else if (context().approximation_mode() == approximation_mode::MINRANGE) {
         beeta = exponent * std::pow(exponent_in_01 ? max() : min(), exponent - 1);
         alpha = 0.5 * (-beeta * 2 * center() + fMin + fMax);
@@ -312,7 +314,7 @@ affine_form affine_form::operator^(double exponent) const {
     return affine_form(context(), beeta * center() + alpha, std::move(dev), std::move(idx), idx.size());
 }
 
-affine_form affine_form::operator^(affine_form const& other) const 
+affine_form affine_form::operator^(affine_form const& other) const
 {
     // precondition
     if (min() < 0) {
@@ -346,7 +348,7 @@ affine_form affine_form::operator^(affine_form const& other) const
         double v = 0;
         if (i < length() && indices_[i] == idx[k]) {
             v = dev_b[k] = deviations_[i++];
-        } 
+        }
         if (j < other.length() && other.indices_[j] == idx[k]) {
             v = dev_e[k] = other.deviations_[j++];
         }
@@ -377,9 +379,9 @@ affine_form affine_form::operator^(affine_form const& other) const
             auto v1 = eps[j] * dev_b[j];
             auto v2 = eps[j] * dev_e[j];
 
-            auto phi = std::atan2(-2 * v2, -2 * v1) - phi0; 
+            auto phi = std::atan2(-2 * v2, -2 * v1) - phi0;
 
-            if (phi > 0 && phi < M_PI && phi_max < phi) {
+            if (phi_max < phi && affine_interval(0, M_PI).contains(phi)) {
                 phi_max = phi;
                 last_eps = j;
             }
@@ -388,46 +390,42 @@ affine_form affine_form::operator^(affine_form const& other) const
         auto v1 = eps[last_eps] * dev_b[last_eps];
         auto v2 = eps[last_eps] * dev_e[last_eps];
 
-        auto x2 = x1 - v1;
-        auto x3 = x2 - v1;
-        auto y2 = y1 - v2;
-        auto y3 = y2 - v2;
+        auto x2 = x1 - v1, x3 = x2 - v1;
+        auto y2 = y1 - v2, y3 = y2 - v2;
 
         auto d1 = fc + fx * (x1 - center()) + fy * (y1 - other.center()) - std::pow(x1, y1);
         auto d2 = fc + fx * (x2 - center()) + fy * (y2 - other.center()) - std::pow(x2, y2);
         auto d3 = fc + fx * (x3 - center()) + fy * (y3 - other.center()) - std::pow(x3, y3);
 
-        if (d1 < d2 && d2 < d3) {
-            dmin = std::min(dmin, d1);
-            dmax = std::max(dmax, d3);
-        } else if (d1 > d2 && d2 > d3) {
-            dmin = std::min(dmin, d3);
-            dmax = std::max(dmax, d1);
-        } else {
-            dmin = std::min(dmin, std::min(d1, d3));
-            dmax = std::max(dmax, std::max(d1, d3));
-        }
+        auto a = std::min(d1, d3);
+        auto b = std::max(d1, d3);
 
-        if (dev_b[last_eps] == 0) {
-            auto x1log = std::log(x1);
-            if (fy / x1log > 0) {
-                auto dyc = std::log(fy / x1log) / x1log;
-                d2 = fc + fx * (x1 - center()) + fy * (dyc - other.center()) - std::pow(x1, dyc);
+        dmin = std::min(dmin, a);
+        dmax = std::max(dmax, b);
+
+        if (!affine_interval(a, b).contains(d2)) {
+            if (dev_b[last_eps] == 0) {
+                auto x1log = std::log(x1);
+                if (fy / x1log > 0) {
+                    auto dyc = std::log(fy / x1log) / x1log;
+                    d2 = fc + fx * (x1 - center()) + fy * (dyc - other.center()) - std::pow(x1, dyc);
+                }
+            } else if (dev_e[last_eps] == 0) {
+                if (fx / y1 > 0) {
+                    auto dyc = std::pow(fx / y1, 1 / (y1 - 1));
+                    d2 = fc + fx * (dyc - center()) + fy * (y1 - other.center()) - std::pow(dyc, y1);
+                }
+            } else {
+                // information may have been lost if d2 < dmin or d2 > dmax
             }
-        } else if (dev_e[last_eps] == 0) {
-            if (fx / y1 > 0) {
-                auto dyc = std::pow(fx / y1, 1 / (y1 - 1));
-                d2 = fc + fx * (dyc - center()) + fy * (y1 - other.center()) - std::pow(dyc, y1);
+
+            if (d3 < d2) {
+                dmax = std::max(dmax, d2);
+            }
+            if (d1 > d2) {
+                dmin = std::min(dmin, d2);
             }
         }
-
-        if (d1 < d2) {
-            dmax = std::max(dmax, d2);
-            dmin = std::min(dmin, std::min(d1, d3));
-        } else {
-            dmin = std::min(dmin, d2);
-            dmax = std::max(dmax, std::max(d1, d3));
-        } 
 
         x1 = x3;
         y1 = y3;
@@ -438,12 +436,15 @@ affine_form affine_form::operator^(affine_form const& other) const
     auto alpha = (dmax + dmin) / 2;
     auto gamma = (dmax - dmin) / 2;
 
+    std::cout << "dmin: " << dmin << ", dmax: " << dmax
+              << ", alpha: " << alpha << ", gamma: " << gamma << "\n";
+
     std::vector<double> dev(idx.size());
     view::as_array(dev) = fx * view::as_array(dev_b) + fy * view::as_array(dev_e);
 
     idx.push_back(context().increment_last());
     dev.push_back(gamma);
 
-    return affine_form(context(), std::pow(center(), other.center()) + alpha, dev, idx, idx.size()); 
+    return affine_form(context(), std::pow(center(), other.center()) + alpha, dev, idx, idx.size());
 }
 } // namespace
