@@ -23,6 +23,22 @@ bool operator==(AAInterval const& lhs, ai const& rhs)
     return rhs == lhs;
 }
 
+bool operator==(af const& lhs, AAF const& rhs)
+{
+    if (lhs.length() > rhs.getlength()) 
+        return false;
+    for (size_t i = 0; i < lhs.length(); ++i) {
+        if (lhs[i] != rhs[i])
+            return false;
+    }
+    return true;
+}
+
+bool operator==(AAF const& lhs, af const& rhs)
+{
+    return rhs == lhs;
+}
+
 TEST_CASE("affine_form::operator+(af)")
 {
     // pappus
@@ -259,16 +275,23 @@ TEST_CASE("affine_form::operator^(int)")
 TEST_CASE("affine_form::operator^(double)")
 {
     ai u1(1, 4);
-    double exponent = 0.5;
     pappus::affine_context ctx;
     af x1(ctx, u1);
-    af y1 = x1 ^ exponent;
 
     AAInterval u2(u1.lower(), u1.upper());
     AAF x2(u2);
-    AAF y2 = x2 ^ exponent;
 
+    for (auto exponent = 0.5; exponent < 5; exponent += 0.5) {
+        af y1 = x1 ^ exponent;
+        AAF y2 = x2 ^ exponent;
+        CHECK(y1.to_interval() == y2.convert());
+        CHECK(y1 == y2);
+    }
+
+    af y1 = x1 ^ 0.0;
+    AAF y2 = x2 ^ 0.0;
     CHECK(y1.to_interval() == y2.convert());
+    CHECK(y1 == y2);
 }
 
 /******************************************************
