@@ -273,13 +273,11 @@ affine_form affine_form::operator^(int exponent) const
 }
 
 affine_form affine_form::operator^(double exponent) const {
-    if (exponent == 1.0) {
+    if (exponent == 1.0)
         return *this;
-    }
 
-    if (exponent == 0.0) {
+    if (exponent == 0.0)
         return affine_form(context(), 1.0);
-    }
 
     auto alpha = 0.0;
     auto beeta = 0.0;
@@ -288,7 +286,7 @@ affine_form affine_form::operator^(double exponent) const {
     auto fMin = std::pow(min(), exponent);
     auto fMax = std::pow(max(), exponent);
 
-    bool exponent_in_01 = 0.0 < exponent && exponent < 1.0;
+    bool exponent_in_01 = affine_interval(0, 1).contains(exponent);
 
     if (context().approximation_mode() == approximation_mode::CHEBYSHEV) {
         beeta = (fMax - fMin) / (2 * radius());
