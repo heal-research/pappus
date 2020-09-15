@@ -255,3 +255,40 @@ TEST_CASE("affine_form::operator^(int)")
 
     CHECK(y1.to_interval() == y2.convert());
 }
+
+TEST_CASE("affine_form::operator^(double)")
+{
+    ai u1(1, 4);
+    double exponent = 0.5;
+    pappus::affine_context ctx;
+    af x1(ctx, u1);
+    af y1 = x1 ^ exponent;
+
+    AAInterval u2(u1.lower(), u1.upper());
+    AAF x2(u2);
+    AAF y2 = x2 ^ exponent;
+
+    CHECK(y1.to_interval() == y2.convert());
+}
+
+/******************************************************
+ * Arbitrary expressions tests                        *
+ *****************************************************/
+TEST_CASE("X^2 + X")
+{
+    ai u1(-1, 1);
+    pappus::affine_context ctx;
+
+    af x1(ctx, u1);
+
+    auto z1 = x1 * x1 + x1;
+
+    AAInterval u2(u1.lower(), u1.upper());
+    AAF x2(u2);
+    AAF z2 = x2 * x2 + x2;
+
+    std::cout << "z1: " << z1.to_interval() << "\n";
+    std::cout << "z2: " << z2.convert();
+
+    CHECK(z1.to_interval() == z2.convert());
+}

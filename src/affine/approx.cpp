@@ -1,164 +1,8 @@
 #include "affine.hpp"
-#include "context.hpp"
-
-#include <algorithm>
-#include <cmath>
-#include <functional>
-#include <optional>
 
 namespace pappus {
-
-bool affine_form::operator==(affine_form const& other) const
-{
-    if (length_ != other.length_) {
-        return false;
-    }
-
-    auto not_equal = [](double x, double y) -> bool {
-        auto a = std::fabs(x);
-        auto b = std::fabs(y);
-        auto c = std::fabs(x - y);
-        if (!(a < 1 && b < 1)) {
-            c /= (a + b);
-        }
-        return c > limits::eps;
-    };
-
-    // no equivalence if the central value is not equal
-    if (not_equal(center_, other.center_)) {
-        return false;
-    }
-
-    for (size_t i = 0; i < length_; ++i) {
-        if (indices_[i] != other.indices_[i]) {
-            return false;
-        }
-        if (not_equal(deviations_[i], other.deviations_[i])) {
-            return false;
-        }
-    }
-
-    return true;
-}
-
-// assignment
-affine_form& affine_form::operator=(double v)
-{
-    center_ = v;
-    radius_ = 0;
-    length_ = 0;
-    return *this;
-}
-
-affine_form& affine_form::operator=(affine_form const& other)
-{
-    if (this != &other) {
-        affine_form tmp(other.context(), other.center(), other.deviations_, other.indices_, other.length_);
-    }
-    return *this;
-}
-
-affine_form& affine_form::operator=(affine_form other)
-{
-    swap(other);
-    return *this;
-}
-
-// affine_form arithmetic
-affine_form affine_form::operator+(double v) const
-{
-    affine_form f(*this);
-    f += v;
-    return f;
-}
-
-affine_form affine_form::operator-(double v) const
-{
-    affine_form f(*this);
-    f -= v;
-    return f;
-}
-
-affine_form affine_form::operator*(double v) const
-{
-    affine_form f(*this);
-    f *= v;
-    return f;
-}
-
-affine_form& affine_form::operator+=(double v)
-{
-    center_ += v;
-    return *this;
-}
-
-affine_form& affine_form::operator-=(double v)
-{
-    center_ -= v;
-    return *this;
-}
-
-affine_form& affine_form::operator*=(double v)
-{
-    view::as_array(deviations_) *= v;
-    center_ *= v;
-    radius_ *= std::fabs(v);
-    return *this;
-}
-
-affine_form& affine_form::operator/=(double v)
-{
-    return operator*=(1.0 / v);
-}
-
-affine_form affine_form::operator-() const
-{
-    affine_form tmp(*this);
-    tmp *= -1.0;
-    return tmp;
-}
-
-affine_form affine_form::operator+(affine_form const& other) const
-{
-    using op = binary_op<opcode::add>;
-    if (auto res = affine_form::handle_special_cases<op>(*this, other); res.has_value()) {
-        return res.value();
-    }
-
-    std::vector<size_t> idx;
-    idx.reserve(length_ + other.length_);
-
-    std::set_union(indices_.begin(), indices_.end(),
-        other.indices_.begin(), other.indices_.end(),
-        std::back_inserter(idx));
-
-    std::vector<double> dev(idx.size());
-
-    // fill the deviations array
-    // reset indices
-    size_t i = 0, j = 0;
-    for (size_t k = 0; k < dev.size(); ++k) {
-        if (k == length_ || indices_[i] != idx[k]) {
-            dev[k] = other.deviations_[j++];
-            continue;
-        }
-        if (k == other.length_ || other.indices_[j] != idx[k]) {
-            dev[k] = deviations_[i++];
-            continue;
-        }
-        dev[k] = deviations_[i++] + other.deviations_[j++];
-    }
-
-    return affine_form(context_, center_ + other.center_, dev, idx, idx.size());
-}
-
-affine_form affine_form::operator-(affine_form const& other) const
-{
-    auto tmp(other);
-    tmp *= -1.0;
-    return *this + tmp;
-}
-
+// non-affine operations approximate the original function
+// and introduce an additional error term (epsilon)
 affine_form affine_form::operator*(affine_form const& other) const
 {
     using op = binary_op<opcode::multiply>;
@@ -228,6 +72,13 @@ affine_form affine_form::operator*(affine_form const& other) const
     return affine_form(context(), c1 * c2 + common_term_center, dev, idx, idx.size());
 }
 
+affine_form& affine_form::operator*=(affine_form const& other)
+{
+    auto tmp = *this * other;
+    swap(tmp);
+    return *this;
+}
+
 affine_form affine_form::operator/(affine_form const& other) const
 {
     if (this == &other) {
@@ -236,25 +87,9 @@ affine_form affine_form::operator/(affine_form const& other) const
     return *this * other.inv();
 }
 
-// not the most efficient approach but reduces code duplication
-// and the probability for mistakes and bugs
-affine_form& affine_form::operator+=(affine_form const& other)
+affine_form& affine_form::operator/=(affine_form const& other) 
 {
-    auto tmp = *this + other;
-    swap(tmp);
-    return *this;
-}
-
-affine_form& affine_form::operator-=(affine_form const& other)
-{
-    auto tmp = *this - other;
-    swap(tmp);
-    return *this;
-}
-
-affine_form& affine_form::operator*=(affine_form const& other)
-{
-    auto tmp = *this * other;
+    auto tmp = *this / other;
     swap(tmp);
     return *this;
 }
@@ -271,7 +106,7 @@ affine_form affine_form::inv() const
     auto a = c - r;
     auto b = c + r;
 
-    auto fa = 1 / a; 
+    auto fa = 1 / a;
     auto fb = 1 / b;
 
     double alpha = 0;
@@ -314,7 +149,7 @@ affine_form affine_form::inv() const
         break;
     }
     case approximation_mode::SECANT: {
-        alpha = r > limits::minrad ? (fb - fa ) / (b - a) 
+        alpha = r > limits::minrad ? (fb - fa) / (b - a)
                                    : -fa * fb;
         dzeta = fa - alpha * a;
         delta = 0;
@@ -437,4 +272,180 @@ affine_form affine_form::operator^(int exponent) const
     return affine_form(context(), alpha * c + dzeta, std::move(dev), std::move(idx), idx.size());
 }
 
+affine_form affine_form::operator^(double exponent) const {
+    if (exponent == 1.0) {
+        return *this;
+    }
+
+    if (exponent == 0.0) {
+        return affine_form(context(), 1.0);
+    }
+
+    auto alpha = 0.0;
+    auto beeta = 0.0;
+    auto gamma = 0.0;
+
+    auto fMin = std::pow(min(), exponent);
+    auto fMax = std::pow(max(), exponent);
+
+    bool exponent_in_01 = 0.0 < exponent && exponent < 1.0;
+
+    if (context().approximation_mode() == approximation_mode::CHEBYSHEV) {
+        beeta = (fMax - fMin) / (2 * radius());
+        auto x2 = std::pow(beeta / exponent, 1 / (exponent - 1));
+        alpha = 0.5 * (-beeta * (min() + x2) + fMin + std::pow(x2, exponent));
+        gamma = 0.5 * (beeta * (x2 - min()) + fMin - std::pow(x2, exponent));
+        if (exponent_in_01) gamma = -gamma;
+    } else if (context().approximation_mode() == approximation_mode::MINRANGE) {
+        beeta = exponent * std::pow(exponent_in_01 ? max() : min(), exponent - 1);
+        alpha = 0.5 * (-beeta * 2 * center() + fMin + fMax);
+        gamma = 0.5 * (-beeta * 2 * radius() - fMin + fMax);
+    }
+
+    auto idx = indices_;
+    auto dev = deviations_;
+    view::as_array(dev) *= beeta;
+
+    if (gamma != 0) {
+        idx.push_back(context().increment_last());
+        dev.push_back(gamma);
+    }
+
+    return affine_form(context(), beeta * center() + alpha, std::move(dev), std::move(idx), idx.size());
+}
+
+affine_form affine_form::operator^(affine_form const& other) const 
+{
+    // precondition
+    if (min() < 0) {
+        throw std::invalid_argument("affine_form::operator^: exponentiation of negative numbers is only possible for integer exponents.");
+    }
+
+    if (length() == 0 && other.length() == 0)
+        return affine_form(context(), std::pow(center(), other.center()));
+
+    if (length() == 0)
+        return center() ^ other;
+
+    if (other.length() == 0)
+        return *this ^ other.center();
+
+    // evaluate the edge of the polygon defined by the base and the exponent
+    std::vector<size_t> idx;
+    idx.reserve(length() + other.length());
+
+    // merge indices and construct deviations vector
+    std::set_union(indices_.begin(), indices_.end(),
+        other.indices_.begin(), other.indices_.end(),
+        std::back_inserter(idx));
+
+    std::vector<double> dev_b(idx.size()); // base deviations
+    std::vector<double> dev_e(idx.size()); // exponent deviations
+    std::vector<double> eps(idx.size());
+
+    size_t i = 0, j = 0;
+    for (size_t k = 0; k < idx.size(); ++k) {
+        double v = 0;
+        if (i < length() && indices_[i] == idx[k]) {
+            v = dev_b[k] = deviations_[i++];
+        } 
+        if (j < other.length() && other.indices_[j] == idx[k]) {
+            v = dev_e[k] = other.deviations_[j++];
+        }
+        eps[k] = (0 < v) - (v < 0); // this computes the signum, which I think was the intention
+    }
+
+    // Find minimum and maximum distance between taylor series and exponentiation
+    auto x1 = (view::as_array(eps) * view::as_array(dev_b)).sum() + center();
+    auto y1 = (view::as_array(eps) * view::as_array(dev_e)).sum() + other.center();
+
+    // two-dimensional Taylor series at the center value
+    auto fc = std::pow(center(), other.center());
+    auto fx = other.center() * std::pow(center(), other.center() - 1);
+    auto fy = fc * std::log(center());
+
+    size_t last_eps = 0;
+
+    auto dmin = std::numeric_limits<double>::max();
+    auto dmax = std::numeric_limits<double>::min();
+
+    // why does the outer loop iterate up to 2 * idx.size() ?
+    for (i = 0; i < 2 * idx.size(); ++i) {
+        // find the outmost segment
+        auto phi0 = std::atan2(other.center() - y1, center() - x1);
+        auto phi_max = 0;
+
+        for (j = 0; j < idx.size(); ++j) {
+            auto v1 = eps[j] * dev_b[j];
+            auto v2 = eps[j] * dev_e[j];
+
+            auto phi = std::atan2(-2 * v2, -2 * v1) - phi0; 
+
+            if (phi > 0 && phi < M_PI && phi_max < phi) {
+                phi_max = phi;
+                last_eps = j;
+            }
+        }
+
+        auto v1 = eps[last_eps] * dev_b[last_eps];
+        auto v2 = eps[last_eps] * dev_e[last_eps];
+
+        auto x2 = x1 - v1;
+        auto x3 = x2 - v1;
+        auto y2 = y1 - v2;
+        auto y3 = y2 - v2;
+
+        auto d1 = fc + fx * (x1 - center()) + fy * (y1 - other.center()) - std::pow(x1, y1);
+        auto d2 = fc + fx * (x2 - center()) + fy * (y2 - other.center()) - std::pow(x2, y2);
+        auto d3 = fc + fx * (x3 - center()) + fy * (y3 - other.center()) - std::pow(x3, y3);
+
+        if (d1 < d2 && d2 < d3) {
+            dmin = std::min(dmin, d1);
+            dmax = std::max(dmax, d3);
+        } else if (d1 > d2 && d2 > d3) {
+            dmin = std::min(dmin, d3);
+            dmax = std::max(dmax, d1);
+        } else {
+            dmin = std::min(dmin, std::min(d1, d3));
+            dmax = std::max(dmax, std::max(d1, d3));
+        }
+
+        if (dev_b[last_eps] == 0) {
+            auto x1log = std::log(x1);
+            if (fy / x1log > 0) {
+                auto dyc = std::log(fy / x1log) / x1log;
+                d2 = fc + fx * (x1 - center()) + fy * (dyc - other.center()) - std::pow(x1, dyc);
+            }
+        } else if (dev_e[last_eps] == 0) {
+            if (fx / y1 > 0) {
+                auto dyc = std::pow(fx / y1, 1 / (y1 - 1));
+                d2 = fc + fx * (dyc - center()) + fy * (y1 - other.center()) - std::pow(dyc, y1);
+            }
+        }
+
+        if (d1 < d2) {
+            dmax = std::max(dmax, d2);
+            dmin = std::min(dmin, std::min(d1, d3));
+        } else {
+            dmin = std::min(dmin, d2);
+            dmax = std::max(dmax, std::max(d1, d3));
+        } 
+
+        x1 = x3;
+        y1 = y3;
+
+        eps[last_eps] = -eps[last_eps];
+    }
+
+    auto alpha = (dmax + dmin) / 2;
+    auto gamma = (dmax - dmin) / 2;
+
+    std::vector<double> dev(idx.size());
+    view::as_array(dev) = fx * view::as_array(dev_b) + fy * view::as_array(dev_e);
+
+    idx.push_back(context().increment_last());
+    dev.push_back(gamma);
+
+    return affine_form(context(), std::pow(center(), other.center()) + alpha, dev, idx, idx.size()); 
+}
 } // namespace

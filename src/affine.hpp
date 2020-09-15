@@ -18,6 +18,9 @@ namespace pappus {
 template <typename T>
 using array = Eigen::Array<T, Eigen::Dynamic, 1>;
 
+template <typename T>
+using mat = Eigen::Matrix<T, Eigen::Dynamic, 1>;
+
 struct view {
     template <typename T>
     static auto as_array(std::vector<T> const& vec)
@@ -30,8 +33,21 @@ struct view {
     {
         return Eigen::Map<array<T>>(vec.data(), vec.size());
     }
+
+    template <typename T>
+    static auto as_vector(std::vector<T> const& vec) {
+        return Eigen::Map<const mat<T>>(vec.data(), vec.size());
+    }
+
+    template <typename T>
+    static auto as_vector(std::vector<T>& vec) {
+        return Eigen::Map<mat<T>>(vec.data(), vec.size());
+    }
 };
 
+// TODO: 
+// in my opinion using an epsilon does not really protect from anything or bring more clarity
+// maybe it would be best to avoid "protected division" and just deal with NaN's in a sensible way
 struct limits {
     static constexpr double eps = std::numeric_limits<double>::epsilon();
     static constexpr double minrad = 1e-10;
@@ -198,7 +214,8 @@ public:
     affine_form operator-(double) const;
     affine_form operator/(double) const;
     affine_form operator-() const;
-    affine_form operator^(int) const;
+    affine_form operator^(int) const;    // TODO:
+    affine_form operator^(double) const; // decide if these two need to be separate
 
     affine_form operator+(affine_form const&) const;
     affine_form operator-(affine_form const&) const;
@@ -219,15 +236,16 @@ public:
     friend affine_form operator-(double v, affine_form const& af) { return -af + v; }
     friend affine_form operator*(double v, affine_form const& af) { return af * v; }
     friend affine_form operator/(double v, affine_form const& af) { return af.inv() * v; }
+    friend affine_form operator^(double v, affine_form const& af) { return af * v; }
 
     friend std::ostream& operator<<(std::ostream& s, affine_form& af)
     {
         s << "-------------------\n";
-        s << "center: " << af.center_ << "\n";
-        s << "radius: " << af.radius_ << "\n";
+        s << "center:     " << af.center_ << "\n";
+        s << "radius:     " << af.radius_ << "\n";
         s << "deviations: " << view::as_array(af.deviations_).transpose() << "\n";
-        s << "indices: " << view::as_array(af.indices_).transpose() << "\n";
-        s << "length: " << af.length_ << "\n";
+        s << "indices:    " << view::as_array(af.indices_).transpose() << "\n";
+        s << "length:     " << af.length_ << "\n";
         s << "-------------------\n";
         return s;
     }

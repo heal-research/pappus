@@ -2,8 +2,6 @@
 #define PAPPUS_AFFINE_CONTEXT_HPP
 
 #include <cstdint>
-#include <functional>
-#include <vector>
 
 namespace pappus {
 

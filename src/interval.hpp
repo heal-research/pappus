@@ -92,18 +92,18 @@ public:
         return std::fmax(l, u);
     }
 
-    affine_interval minimal_periodic(const affine_interval& interval)
-    {
-        auto [a, b] = interval.bounds();
+    // affine_interval minimal_periodic(const affine_interval& interval)
+    // {
+    //     auto [a, b] = interval.bounds();
 
-        auto t1 = std::floor(a / (2 * M_PI));
-        auto t2 = b - a;
+    //     auto t1 = std::floor(a / (2 * M_PI));
+    //     auto t2 = b - a;
 
-        a = a - (t1 * 2 * M_PI);
-        b = a + t2;
+    //     a = a - (t1 * 2 * M_PI);
+    //     b = a + t2;
 
-        return affine_interval(a, b);
-    }
+    //     return affine_interval(a, b);
+    // }
 
     // printing
     friend std::ostream& operator<<(std::ostream& s,
