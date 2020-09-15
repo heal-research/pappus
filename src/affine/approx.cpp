@@ -30,26 +30,26 @@ affine_form affine_form::operator*(affine_form const& other) const
 
     size_t i = 0, j = 0;
     for (size_t k = 0; k < dev.size(); ++k) {
-        if (k == length_ || indices_[i] != idx[k]) {
-            dev[k] = c1 * other.deviations_[j];
+        auto f1 = i < indices_.size() && idx[k] == indices_[i];
+        auto f2 = j < other.indices_.size() && idx[k] == other.indices_[j];
+
+        if (f1 && f2) {
+            auto d1 = deviations_[i];
+            auto d2 = other.deviations_[j];
+
+            dev[k] = c1 * d2 + c2 * d1;
+            common_term_center += d1 * d2;
+            common_term_deviation += std::fabs(d1 * d2);
+
+            ++i;
             ++j;
-            continue;
-        }
-        if (k == other.length_ || other.indices_[j] != idx[k]) {
+        } else if (f1) {
             dev[k] = c2 * deviations_[i];
             ++i;
-            continue;
+        } else if (f2) {
+            dev[k] = c1 * other.deviations_[j];
+            ++j;
         }
-
-        auto d1 = deviations_[i];
-        auto d2 = other.deviations_[j];
-
-        dev[k] = c1 * d2 + c2 * d1;
-        common_term_center += d1 * d2;
-        common_term_deviation += std::fabs(d1 * d2);
-
-        ++i;
-        ++j;
     }
 
     common_term_center /= 2;

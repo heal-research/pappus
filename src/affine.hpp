@@ -141,6 +141,11 @@ public:
         return std::nullopt;
     }
 
+    // replicates method from aaflib
+    double operator[](size_t i) const {
+        return i == 0 ? center_ : deviations_[i-1];
+    }
+
     affine_context& context() const { return context_.get(); }
 
     double center() const { return center_; }
@@ -238,7 +243,7 @@ public:
     friend affine_form operator/(double v, affine_form const& af) { return af.inv() * v; }
     friend affine_form operator^(double v, affine_form const& af) { return af * v; }
 
-    friend std::ostream& operator<<(std::ostream& s, affine_form& af)
+    friend std::ostream& operator<<(std::ostream& s, affine_form const& af)
     {
         s << "-------------------\n";
         s << "center:     " << af.center_ << "\n";
