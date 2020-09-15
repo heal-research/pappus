@@ -352,7 +352,7 @@ affine_form affine_form::operator^(affine_form const& other) const
         if (j < other.length() && other.indices_[j] == idx[k]) {
             v = dev_e[k] = other.deviations_[j++];
         }
-        eps[k] = (0 < v) - (v < 0); // this computes the signum, which I think was the intention
+        eps[k] = (v < 0) - (0 < v); // opposite of the signum (maybe bug in aaflib?)
     }
 
     // Find minimum and maximum distance between taylor series and exponentiation
@@ -365,21 +365,19 @@ affine_form affine_form::operator^(affine_form const& other) const
     auto fy = fc * std::log(center());
 
     size_t last_eps = 0;
-
     auto dmin = std::numeric_limits<double>::max();
     auto dmax = std::numeric_limits<double>::min();
 
-    // why does the outer loop iterate up to 2 * idx.size() ?
     for (i = 0; i < 2 * idx.size(); ++i) {
         // find the outmost segment
         auto phi0 = std::atan2(other.center() - y1, center() - x1);
-        auto phi_max = 0;
+        auto phi_max = 0.0;
 
         for (j = 0; j < idx.size(); ++j) {
-            auto v1 = eps[j] * dev_b[j];
-            auto v2 = eps[j] * dev_e[j];
-
-            auto phi = std::atan2(-2 * v2, -2 * v1) - phi0;
+            // the conditionals are necessary because we want +0.0 (not -0.0)
+            auto phi = std::atan2(dev_e[j] == 0 ? 0 : -2 * eps[j] * dev_e[j],
+                                  dev_b[j] == 0 ? 0 : -2 * eps[j] * dev_b[j]);
+            phi -= phi0;
 
             if (phi_max < phi && affine_interval(0, M_PI).contains(phi)) {
                 phi_max = phi;
@@ -419,12 +417,8 @@ affine_form affine_form::operator^(affine_form const& other) const
                 // information may have been lost if d2 < dmin or d2 > dmax
             }
 
-            if (d3 < d2) {
-                dmax = std::max(dmax, d2);
-            }
-            if (d1 > d2) {
-                dmin = std::min(dmin, d2);
-            }
+            dmin = std::min(dmin, std::min(a, d2));
+            dmax = std::max(dmax, std::max(b, d2));
         }
 
         x1 = x3;
@@ -435,9 +429,6 @@ affine_form affine_form::operator^(affine_form const& other) const
 
     auto alpha = (dmax + dmin) / 2;
     auto gamma = (dmax - dmin) / 2;
-
-    std::cout << "dmin: " << dmin << ", dmax: " << dmax
-              << ", alpha: " << alpha << ", gamma: " << gamma << "\n";
 
     std::vector<double> dev(idx.size());
     view::as_array(dev) = fx * view::as_array(dev_b) + fy * view::as_array(dev_e);

@@ -296,20 +296,21 @@ TEST_CASE("affine_form::operator^(double)")
 
 TEST_CASE("affine_form::operator^(af)")
 {
-    ai u1(1, 4);
-    pappus::affine_context ctx;
-    af x1(ctx, u1);
+    auto check_exp = [](auto const& base, auto const& exponent) {
+        pappus::affine_context ctx;
+        af x1(ctx, base);
+        af e1(ctx, exponent);
+        af y1 = x1 ^ e1;
 
-    AAInterval u2(u1.lower(), u1.upper());
-    AAF x2(u2);
+        AAF x2 = AAF(AAInterval(base.lower(), base.upper()));
+        AAF e2 = AAF(AAInterval(exponent.lower(), exponent.upper()));
+        AAF y2 = x2 ^ e2;
+        CHECK(y1.to_interval() == y2.convert());
+        CHECK(y1 == y2);
+    };
 
-    auto e1 = af(ctx, ai(2,3));
-    auto e2 = AAF(AAInterval(2,3));
-
-    af y1 = x1 ^ e1;
-    AAF y2 = x2 ^ e2;
-    CHECK(y1.to_interval() == y2.convert());
-    CHECK(y1 == y2);
+    SUBCASE("[1, 4] ^ [0, 0.5]") { check_exp(ai(1, 4), ai(0, 0.5)); }
+    SUBCASE("[0.1, 2] ^ [-1, 0]") { check_exp(ai(0.1, 2), ai(-1, 0)); }
 }
 
 /******************************************************
@@ -327,9 +328,6 @@ TEST_CASE("X^2 + X")
     AAInterval u2(u1.lower(), u1.upper());
     AAF x2(u2);
     AAF z2 = x2 * x2 + x2;
-
-    std::cout << "z1: " << z1.to_interval() << "\n";
-    std::cout << "z2: " << z2.convert();
 
     CHECK(z1.to_interval() == z2.convert());
 }
