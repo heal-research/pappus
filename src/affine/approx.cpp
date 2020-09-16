@@ -171,7 +171,7 @@ affine_form affine_form::inv() const
     return affine_form(context(), alpha * c + dzeta, std::move(dev), std::move(idx), idx.size());
 }
 
-affine_form affine_form::operator^(int exponent) const
+affine_form affine_form::pow(int exponent) const
 {
     if (length_ == 0)
         return affine_form(context(), std::pow(center(), exponent));
@@ -269,10 +269,12 @@ affine_form affine_form::operator^(int exponent) const
     idx[length_] = context().increment_last();
     dev[length_] = delta;
 
-    return affine_form(context(), alpha * c + dzeta, std::move(dev), std::move(idx), idx.size());
+
+    auto result = affine_form(context(), alpha * c + dzeta, dev, idx, idx.size());
+    return result;
 }
 
-affine_form affine_form::operator^(double exponent) const
+affine_form affine_form::pow(double exponent) const
 {
     if (exponent == 1.0)
         return *this;
@@ -314,21 +316,22 @@ affine_form affine_form::operator^(double exponent) const
     return affine_form(context(), beeta * center() + alpha, std::move(dev), std::move(idx), idx.size());
 }
 
-affine_form affine_form::operator^(affine_form const& other) const
+affine_form affine_form::pow(affine_form const& other) const
 {
     // precondition
     if (min() < 0) {
-        throw std::invalid_argument("affine_form::operator^: exponentiation of negative numbers is only possible for integer exponents.");
+        throw std::invalid_argument("affine_form::pow: exponentiation of negative numbers is only possible for integer exponents.");
     }
 
     if (length() == 0 && other.length() == 0)
         return affine_form(context(), std::pow(center(), other.center()));
 
     if (length() == 0)
-        return center() ^ other;
+        return pow(center(), other);
 
     if (other.length() == 0)
-        return *this ^ other.center();
+        return this->pow(other.center());
+        //return pow(*this, other.center());
 
     // evaluate the edge of the polygon defined by the base and the exponent
     std::vector<size_t> idx;
@@ -436,6 +439,46 @@ affine_form affine_form::operator^(affine_form const& other) const
     idx.push_back(context().increment_last());
     dev.push_back(gamma);
 
-    return affine_form(context(), std::pow(center(), other.center()) + alpha, dev, idx, idx.size());
+    return affine_form(context(), std::pow(center(), other.center()) + alpha, std::move(dev), std::move(idx), idx.size());
+}
+
+affine_form affine_form::pow(double base, affine_form const& exponent) {
+    if (base == 1) {
+        std::vector<size_t> idx = exponent.indices_;
+        std::vector<double> dev = exponent.deviations_;
+        idx.push_back(exponent.context().increment_last());
+        dev.push_back(0.0);
+        return affine_form(exponent.context(), 1.0, dev, idx, idx.size());
+    }
+
+    if (base == 0) {
+        throw new std::invalid_argument("base cannot be zero");
+    }
+
+    auto alpha = 0.0;
+    auto beeta = 0.0;
+    auto gamma = 0.0;
+
+    auto fMin = std::pow(base, exponent.min());
+    auto fMax = std::pow(base, exponent.max());
+
+    if (exponent.context().approximation_mode() == approximation_mode::MINRANGE) {
+        beeta = fMin * std::log(base);
+        alpha = -beeta * 2 * exponent.center() + fMin + fMax;
+        gamma = -beeta * 2 * exponent.radius() - fMin + fMax;
+    } else { // CHEBYSHEV
+        auto b = std::log(base);
+        beeta = (fMax - fMin) / (exponent.max() - exponent.min());
+        auto x2 = std::log(beeta / b) / b;
+        alpha = 0.5 * (-beeta * (exponent.min() + x2) + fMin + std::pow(base, x2));
+        gamma = 0.5 * (-beeta * (exponent.min() - x2) + fMin - std::pow(base, x2));
+    }
+
+    std::vector<size_t> idx = exponent.indices_;
+    std::vector<double> dev = exponent.deviations_;
+    view::as_array(dev) *= beeta;
+    idx.push_back(exponent.context().increment_last());
+    dev.push_back(gamma);
+    return affine_form(exponent.context(), beeta * exponent.center() + alpha, std::move(dev), std::move(idx), idx.size());
 }
 } // namespace
