@@ -219,14 +219,14 @@ public:
     affine_form operator-(double) const;
     affine_form operator/(double) const;
     affine_form operator-() const;
-    affine_form operator^(int) const;    // TODO:
-    affine_form operator^(double) const; // decide if these two need to be separate
+    affine_form pow(int) const;    // TODO:
+    affine_form pow(double) const; // decide if these two need to be separate
 
     affine_form operator+(affine_form const&) const;
     affine_form operator-(affine_form const&) const;
     affine_form operator*(affine_form const&) const;
     affine_form operator/(affine_form const&) const;
-    affine_form operator^(affine_form const&) const;
+    affine_form pow(affine_form const&) const;
 
     affine_form& operator+=(affine_form const&);
     affine_form& operator-=(affine_form const&);
@@ -241,7 +241,6 @@ public:
     friend affine_form operator-(double v, affine_form const& af) { return -af + v; }
     friend affine_form operator*(double v, affine_form const& af) { return af * v; }
     friend affine_form operator/(double v, affine_form const& af) { return af.inv() * v; }
-    friend affine_form operator^(double v, affine_form const& af) { return af * v; }
 
     friend std::ostream& operator<<(std::ostream& s, affine_form const& af)
     {
@@ -254,6 +253,10 @@ public:
         s << "-------------------\n";
         return s;
     }
+
+    // static methods
+    static affine_form pow(double v, affine_form const& af);
+    static affine_form pow(affine_form const& af, double v) { return af.pow(v); }
 
 private:
     std::reference_wrapper<affine_context> context_;
