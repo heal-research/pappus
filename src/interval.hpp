@@ -107,17 +107,17 @@ public:
     }
 
     // properties (loosely inspired from GAOL)
-    bool isfinite() const
+    bool is_finite() const
     {
         return std::isfinite(lower()) && std::isfinite(upper());
     }
 
-    bool isinfinite() const
+    bool is_infinite() const
     {
         return std::isinf(lower()) && std::isinf(upper());
     }
 
-    bool isempty() const
+    bool is_empty() const
     {
         return !(lower() <= upper()); // negation to handle NaNs
     }
@@ -127,19 +127,19 @@ public:
         return is<pappus::Z>();
     }
 
-    bool issymmetric() const
+    bool is_symmetric() const
     {
-        return !isempty() && (-lower() == upper());
+        return !is_empty() && (-lower() == upper());
     }
 
     bool is_positive() const
     {
-        return isempty() || (lower() >= 0.0);
+        return is_empty() || (lower() >= 0.0);
     }
 
     bool is_strictly_positive() const
     {
-        return isempty() || (lower() > 0.0);
+        return is_empty() || (lower() > 0.0);
     }
 
     // intersection
@@ -167,7 +167,7 @@ public:
 
     bool operator==(interval const& other) const
     {
-        return (isempty() && other.isempty()) || (lower() == other.lower() && upper() == other.upper());
+        return (is_empty() && other.is_empty()) || (lower() == other.lower() && upper() == other.upper());
     }
 
     bool operator<(interval const& other) const
@@ -184,6 +184,7 @@ public:
 
     // arithmetic operators
     interval operator+(interval const& other) const;
+    interval operator+() const;
     interval operator-(interval const& other) const;
     interval operator-() const;
     interval operator*(interval const& other) const;
@@ -198,6 +199,10 @@ public:
     interval operator-(double v) const;
     interval operator*(double v) const;
     interval operator/(double v) const;
+
+    friend interval operator+(double v, interval const& i) { return i + v; }
+    friend interval operator-(double v, interval const& i) { return -i + v; }
+    friend interval operator*(double v, interval const& i) { return i * v; }
 
     interval inv() const;
 
@@ -228,8 +233,9 @@ public:
         }
     }
 
-    static interval emptyset()  { return interval(+fp::nan, -fp::nan); }
-    static interval unbounded() { return interval(-fp::inf, +fp::inf); }
+    static interval empty()  { return interval(+fp::nan, -fp::nan); }
+    static interval infinite() { return interval(-fp::inf, +fp::inf); }
+    static interval zero()      { return interval(0.0, 0.0); }
 
 private:
     double lower_;
@@ -237,6 +243,12 @@ private:
 
     static std::pair<double, double> check_bounds(double lo, double hi)
     {
+        // it can happen that the sign of infinity is confused:
+        // - if we compute a upper bound as -2/0=-inf but we want +inf
+        // - if we compute a lower bound as 4/0=inf but we want -inf
+        // so we correct there cases here
+        if (lo == fp::inf) lo = -fp::inf;
+        if (hi == -fp::inf) hi = fp::inf;
         EXPECT(!(lo > hi));
         return std::pair<double, double>(lo, hi);
     }

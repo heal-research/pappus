@@ -46,7 +46,9 @@ namespace fp {
         }
     };
     struct op_div {
-        double operator()(double a, double b) { return a / b; }
+        double operator()(double a, double b) {
+            return a / b; 
+        }
     };
 
     template <int ROUND_MODE>
