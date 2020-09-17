@@ -85,7 +85,7 @@ interval interval::operator*(interval const& other) const
             return interval(std::min(D(a, d), D(b, c)), std::max(U(a, c), U(b, d)));
 
         if (0 <= c) // P
-            return interval(D(a, d), D(b, d));
+            return interval(D(a, d), U(b, d));
     } else if (0 <= a) { // P
         if (d <= 0) // N
             return interval(D(b, c), U(a, d));
