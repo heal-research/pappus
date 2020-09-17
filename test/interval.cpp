@@ -6,25 +6,32 @@ using I = pappus::interval;
 
 TEST_CASE("extended real arithmetic rules")
 {
-    const auto inf = std::numeric_limits<double>::infinity();
+    const auto inf = pappus::fp::inf;
     const auto x = 1.2345;
 
-    CHECK(inf + x == inf);
-    CHECK(-inf + x == -inf);
-    CHECK(-inf + (-inf) == -inf);
-    CHECK(inf + inf == inf);
-    CHECK(inf - inf == 0);
-    CHECK(-inf + inf == 0);
+    pappus::fp::op_add add{};
+    pappus::fp::op_sub sub{};
+    pappus::fp::op_div div{};
+    pappus::fp::op_mul mul{};
 
-    CHECK(-inf * inf == -inf);
-    CHECK(-inf * -inf == inf);
-    CHECK(0 * inf == 0);
-    CHECK(inf * 0 == 0);
-    CHECK(0 * -inf == 0);
-    CHECK(-inf * 0 == 0);
+    CHECK(add(inf, x) == inf);
+    CHECK(add(-inf, x) == -inf);
+    CHECK(add(-inf, -inf) == -inf);
+    CHECK(add(inf, inf) == inf);
+    CHECK(std::isnan(sub(inf, inf)));
+    CHECK(std::isnan(add(-inf, inf)));
 
-    CHECK(x / inf == 0);
-    CHECK(x / -inf == 0);
+    CHECK(mul(-inf, inf) == -inf);
+    CHECK(mul(-inf, -inf) == inf);
+    CHECK(mul(0, inf) == 0);
+    CHECK(mul(inf, 0) == 0);
+    CHECK(mul(0, -inf) == 0);
+    CHECK(mul(-inf, 0) == 0);
+
+    CHECK(div(x, inf) == 0);
+    CHECK(div(x, -inf) == 0);
+    CHECK(div(x, 0) == inf);
+    CHECK(div(x, -0) == inf);
 }
 
 TEST_CASE("interval::operator+")

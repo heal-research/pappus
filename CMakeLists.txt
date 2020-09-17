@@ -4,7 +4,8 @@ include(FetchContent)
 include(FeatureSummary)
 
 project(pappus_proj
-    LANGUAGES CXX)
+    LANGUAGES CXX
+    )
 
 FetchContent_Declare(
     aaflib

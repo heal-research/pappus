@@ -2,80 +2,17 @@
 #define PAPPUS_INTERVAL_HPP
 
 #include <cassert>
-#include <cfenv>
-#include <cmath>
 #include <iostream>
 #include <limits>
 #include <ostream>
-#include <sstream>
 #include <type_traits>
 #include <utility>
 
-#define EXPECT(cond) \
-    if(!(cond)) \
-    { \
-        std::cout << "precondition " << #cond << " failed at " << __FILE__ << ": " << __LINE__ << "\n"; \
-        std::terminate(); \
-    } 
-
-#define ENSURE(cond) \
-    if(!(cond)) \
-    { \
-        std::cout << "postcondition " << #cond << " failed at " << __FILE__ << ": " << __LINE__ << "\n"; \
-        std::terminate(); \
-    }
-
-#ifndef M_PI
-#define M_PI 3.14159265358979323846 // pi
-#endif
+#include "fputil.hpp"
 
 namespace pappus {
 
 namespace {
-    template <int ROUND_MODE>
-    double from_string(std::string const& s)
-    {
-        static_assert(ROUND_MODE == FE_UPWARD || ROUND_MODE == FE_DOWNWARD);
-        auto rounding_mode = std::fegetround();
-        std::fesetround(ROUND_MODE);
-        std::istringstream is(s);
-        double v;
-        is >> v;
-        std::fesetround(rounding_mode);
-        return v;
-    }
-
-    // rounded op
-    template <typename OP, int ROUND_MODE>
-    double rop(double a, double b)
-    {
-        static_assert(ROUND_MODE == FE_UPWARD || ROUND_MODE == FE_DOWNWARD);
-        static_assert(std::is_invocable_r<double, OP, double, double>::value);
-        auto rnd = std::fegetround();
-        std::fesetround(ROUND_MODE);
-        auto c = OP()(a, b);
-        std::fesetround(rnd);
-        // necessary to abide to the arithmetic rules underlying IA, details in:
-        // Complete Interval Arithmetic and its Implementation on the Computer
-        // Ulrich W. Kulisch
-        if (std::isnan(c) || c == -0.0)
-            return 0.0;
-
-        return c;
-    }
-
-    // rounded op, downwards
-    template <typename OP>
-    const auto ropd = rop<OP, FE_DOWNWARD>;
-
-    // rounded op, upwards
-    template <typename OP>
-    const auto ropu = rop<OP, FE_UPWARD>;
-
-    using op_add = std::plus<double>;
-    using op_sub = std::minus<double>;
-    using op_mul = std::multiplies<double>;
-    using op_div = std::divides<double>;
 }
 
 enum interval_class { M, Z, P, P0, P1, N, N0, N1, NONE };
@@ -92,12 +29,12 @@ public:
     }
 
     explicit interval(std::string const& s)
-        : interval(from_string<FE_DOWNWARD>(s), from_string<FE_UPWARD>(s))
+        : interval(fp::from_string<FE_DOWNWARD>(s), fp::from_string<FE_UPWARD>(s))
     {
     }
 
     explicit interval(std::string const& l, std::string const& u)
-        : interval(from_string<FE_DOWNWARD>(l), from_string<FE_UPWARD>(u))
+        : interval(fp::from_string<FE_DOWNWARD>(l), fp::from_string<FE_UPWARD>(u))
     {
     }
 
@@ -135,12 +72,10 @@ public:
 
     double mid() const
     {
-        auto rounding_mode = std::fegetround();
-
         // lower
-        auto lo = ropd<op_mul>(lower_, 0.5);
+        auto lo = fp::ropd<fp::op_mul>(lower_, 0.5);
         // upper
-        auto up = ropu<op_mul>(upper_, 0.5);
+        auto up = fp::ropu<fp::op_mul>(upper_, 0.5);
         return lo + up;
     }
 
@@ -148,7 +83,7 @@ public:
     {
         double m = mid();
         auto [a, b] = bounds();
-        return std::fmax(ropd<op_sub>(m, a), ropu<op_sub>(b, m));
+        return std::fmax(fp::ropd<fp::op_sub>(m, a), fp::ropu<fp::op_sub>(b, m));
     }
 
     bool contains(double v) const
@@ -189,7 +124,7 @@ public:
 
     bool is_zero() const
     {
-        return is<interval_class::Z>();
+        return is<pappus::Z>();
     }
 
     bool issymmetric() const
@@ -235,6 +170,11 @@ public:
         return (isempty() && other.isempty()) || (lower() == other.lower() && upper() == other.upper());
     }
 
+    bool operator<(interval const& other) const
+    {
+        return lower() <= other.lower() && upper() <= other.upper();
+    }
+
     std::pair<interval, interval> split() const
     {
         auto left = interval { lower(), mid() };
@@ -264,7 +204,7 @@ public:
     template <interval_class C>
     constexpr bool is() const
     {
-        static_assert(C >= interval_class::M && C <= interval_class::N1);
+        static_assert(C >= interval_class::M && C <= interval_class::N1, "Unknown interval class.");
         auto [a, b] = bounds();
         switch (C) {
         case M:
@@ -286,8 +226,10 @@ public:
         default:
             return false;
         }
-        return false;
     }
+
+    static interval emptyset()  { return interval(+fp::nan, -fp::nan); }
+    static interval unbounded() { return interval(-fp::inf, +fp::inf); }
 
 private:
     double lower_;

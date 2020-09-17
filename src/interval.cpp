@@ -11,14 +11,14 @@ interval interval::operator+(interval const& other) const
 {
     auto [a1, a2] = bounds();
     auto [b1, b2] = other.bounds();
-    return interval(ropd<op_add>(a1, b1), ropu<op_add>(a2, b2));
+    return interval(fp::ropd<fp::op_add>(a1, b1), fp::ropu<fp::op_add>(a2, b2));
 }
 
 interval interval::operator-(interval const& other) const
 {
     auto [a1, a2] = bounds();
     auto [b1, b2] = other.bounds();
-    return interval(ropd<op_sub>(a1, b2), ropu<op_sub>(a2, b1));
+    return interval(fp::ropd<fp::op_sub>(a1, b2), fp::ropu<fp::op_sub>(a2, b1));
 }
 
 // implementation based on the algorithm presented in:
@@ -30,8 +30,8 @@ interval interval::operator*(interval const& other) const
     auto [a1, a2] = bounds();
     auto [b1, b2] = other.bounds();
 
-    const auto D = ropd<op_mul>;
-    const auto U = ropu<op_mul>;
+    const auto D = fp::ropd<fp::op_mul>;
+    const auto U = fp::ropu<fp::op_mul>;
 
     if (is_zero() || other.is_zero())
         return interval(0.0, 0.0);
@@ -65,50 +65,75 @@ interval interval::operator*(interval const& other) const
             return interval(D(a1, b1), U(a2, b2));
     }
 
-    return interval(NAN, NAN);
+    return interval(fp::nan, fp::nan);
 }
 
 interval interval::operator/(interval const& other) const
 {
+    if (isempty())
+        return interval::emptyset();
+
+    EXPECT(!(std::isnan(lower()) || std::isnan(upper())));
+
     auto [a1, a2] = bounds();
     auto [b1, b2] = other.bounds();
 
-    const auto D = ropd<op_div>;
-    const auto U = ropu<op_div>;
+    const auto D = fp::ropd<fp::op_div>;
+    const auto U = fp::ropu<fp::op_div>;
 
     if (isinfinite() || other.isinfinite())
-        return interval(-INFINITY, INFINITY);
+        return interval::unbounded();
 
     if (other.is_zero()) {
-            return contains(0.0) ? interval(-INFINITY, INFINITY)
-                                 : interval(NAN, NAN);
+            return contains(0.0) ? interval::unbounded()
+                                 : interval::emptyset();
     }
 
     if (other.contains(0.0)) {
         if (contains(0.0))
-            return interval(-INFINITY, INFINITY);
+            return interval::unbounded();
 
         if (a2 < 0) {
             if (other.is_zero())
-                return interval(NAN, NAN); // empty interval
+                return interval::emptyset(); // empty interval
 
             if (b2 == 0)
-                return interval(D(a2, b1), INFINITY);
+                return interval(D(a2, b1), fp::inf);
 
             if (b1 == 0)
-                return interval(-INFINITY, D(a2, b2));
+                return interval(-fp::inf, U(a2, b2));
+        }
+        return interval::unbounded();
+    } else {
+        if (is_zero())
+            return interval::emptyset();
 
-            // in the case b1 < 0 < b2 we could return [-inf, inf]
-            // or two distinct intervals: [-inf, U(a2, b2)] and [D(a2, b1), inf]
-            // we choose the simple variant for now
-            return interval(-INFINITY, INFINITY);
+        if (a2 <= 0) {
+            if (b2 < 0)
+                return interval(D(a2, b1), U(a1, b2));
+
+            if (b1 > 0)
+                return interval(D(a1, b1), U(a2, b2));
         }
 
-    } else {
+        if (contains_strict(0.0)) {
+            if (b2 < 0)
+                return interval(D(a2, b2), U(a1, b2));
 
+            if (b1 > 0)
+                return interval(D(a1, b1), U(a2, b1));
+        }
+
+        if (0 <= a1) {
+            if (b2 < 0)
+                return interval(D(a2, b2), U(a1, b1));
+
+            if (b1 > 0)
+                return interval(D(a1, b2), U(a2, b1));
+        }
     }
 
-    return interval(NAN, NAN);
+    return interval(fp::nan, fp::nan);
 }
 
 interval& interval::operator+=(interval const& other)
