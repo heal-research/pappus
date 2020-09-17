@@ -122,21 +122,21 @@ TEST_CASE("division" * dt::test_suite("IA"))
     CHECK_EQ(I(-2,0) / I(0,4), I(-inf, 0)); // N0/P0
     CHECK_EQ(I(-2,0) / I(4,5), I(-0.5, 0)); // N0/P1
     CHECK_EQ(I(-3,2) / I(-5,-4), I(-0.5, 0.75)); // M/N1
-	CHECK_EQ(I(-3,2) / Z, E); // M/Z
-	CHECK_EQ(I(-3,2) / I(-4,0), F); // M/N0
-	CHECK_EQ(I(-3,2) / I(-4,5), F); // M/M
-	CHECK_EQ(I(-3,2) / I(0,5), F); // M/P0
-	CHECK_EQ(I(-3,2) / I(4,5), I(-0.75,0.5)); // M/P1
-	CHECK_EQ(I(0,2) / I(-5,-4), I(-0.5,0.0)); // P0/N1
-	CHECK_EQ(I(0,2) / Z, E); // P0/Z
+    CHECK_EQ(I(-3,2) / Z, E); // M/Z
+    CHECK_EQ(I(-3,2) / I(-4,0), F); // M/N0
+    CHECK_EQ(I(-3,2) / I(-4,5), F); // M/M
+    CHECK_EQ(I(-3,2) / I(0,5), F); // M/P0
+    CHECK_EQ(I(-3,2) / I(4,5), I(-0.75,0.5)); // M/P1
+    CHECK_EQ(I(0,2) / I(-5,-4), I(-0.5,0.0)); // P0/N1
+    CHECK_EQ(I(0,2) / Z, E); // P0/Z
     CHECK_EQ(I(0,2) / I(-4,0), I(-inf,0)); // P0/N0
-	CHECK_EQ(I(0,2)/I(-4,5), F); // P0/M
+    CHECK_EQ(I(0,2)/I(-4,5), F); // P0/M
     CHECK_EQ(I(0,2) / I(0,5), I(0,inf)); // P0/P0
-	CHECK_EQ(I(0,2) / I(4,5), I(0,0.5)); // P0/P1
-	CHECK_EQ(I(2,3) / I(-5,-4), I("-0.75","-0.4")); // P1/N1
-	CHECK_EQ(I(2,3) / Z, E); // P1/Z
+    CHECK_EQ(I(0,2) / I(4,5), I(0,0.5)); // P0/P1
+    CHECK_EQ(I(2,3) / I(-5,-4), I("-0.75","-0.4")); // P1/N1
+    CHECK_EQ(I(2,3) / Z, E); // P1/Z
     CHECK_EQ(I(2,3) / I(-4,0), I(-inf, -0.5)); // P1/N0
-	CHECK_EQ(I(2,3)/I(-4,5), F); // P1/M
+    CHECK_EQ(I(2,3)/I(-4,5), F); // P1/M
     CHECK_EQ(I(2,3) / I(0,4), I(0.5, inf)); // P1/P0
-	CHECK_EQ(I(2,3) / I(4,5), I("0.4","0.75")); // P1/P1
+    CHECK_EQ(I(2,3) / I(4,5), I("0.4","0.75")); // P1/P1
 }
