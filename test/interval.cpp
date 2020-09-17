@@ -4,6 +4,29 @@
 
 using I = pappus::interval;
 
+TEST_CASE("extended real arithmetic rules")
+{
+    const auto inf = std::numeric_limits<double>::infinity();
+    const auto x = 1.2345;
+
+    CHECK(inf + x == inf);
+    CHECK(-inf + x == -inf);
+    CHECK(-inf + (-inf) == -inf);
+    CHECK(inf + inf == inf);
+    CHECK(inf - inf == 0);
+    CHECK(-inf + inf == 0);
+
+    CHECK(-inf * inf == -inf);
+    CHECK(-inf * -inf == inf);
+    CHECK(0 * inf == 0);
+    CHECK(inf * 0 == 0);
+    CHECK(0 * -inf == 0);
+    CHECK(-inf * 0 == 0);
+
+    CHECK(x / inf == 0);
+    CHECK(x / -inf == 0);
+}
+
 TEST_CASE("interval::operator+")
 {
     SUBCASE("[a1, b1] + [a2, b2]")
