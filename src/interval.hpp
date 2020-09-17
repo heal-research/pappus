@@ -233,9 +233,9 @@ public:
         }
     }
 
-    static interval empty()  { return interval(+fp::nan, -fp::nan); }
+    static interval empty() { return interval(+fp::nan, -fp::nan); }
     static interval infinite() { return interval(-fp::inf, +fp::inf); }
-    static interval zero()      { return interval(0.0, 0.0); }
+    static interval zero() { return interval(+0.0, -0.0); }
 
 private:
     double lower_;
@@ -243,12 +243,11 @@ private:
 
     static std::pair<double, double> check_bounds(double lo, double hi)
     {
-        // it can happen that the sign of infinity is confused:
-        // - if we compute a upper bound as -2/0=-inf but we want +inf
-        // - if we compute a lower bound as 4/0=inf but we want -inf
-        // so we correct there cases here
-        if (lo == fp::inf) lo = -fp::inf;
-        if (hi == -fp::inf) hi = fp::inf;
+        // signed zero convention - see T. Hickey, Q. Ju, M. H. van Emden
+        // Interval Arithmetic - From Principles to Implementation - Section 5.2
+        // -0 used for right endpoints while +0 is used for left endpoints
+        if (lo == 0) lo = +0.0;
+        if (hi == 0) hi = -0.0;
         EXPECT(!(lo > hi));
         return std::pair<double, double>(lo, hi);
     }
