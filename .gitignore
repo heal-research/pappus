@@ -3,3 +3,9 @@
 /.ycm_extra_conf.py
 /.clangd
 /compile_commands.json
+/doc/*.aux
+/doc/*.fls
+/doc/*.fdb*
+/doc/*.log
+/doc/*.out
+/doc/*.synctex.gz
