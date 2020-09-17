@@ -65,16 +65,16 @@ TEST_CASE("subtraction" * dt::test_suite("IA"))
 
 TEST_CASE("multiplication" * dt::test_suite("IA"))
 {
-    CHECK_EQ(E * E,E);
-    CHECK_EQ(F * F,F);
-    CHECK_EQ(E * I(4,5),E);
-    CHECK_EQ(I(4,5) * E,E);
-    CHECK_EQ(E * Z,E);
-    CHECK_EQ(Z * E,E);
-    CHECK_EQ(3 * E,E);
-    CHECK_EQ(E * 3,E);
-    CHECK_EQ(E * 0.0,E);
-    CHECK_EQ(0.0 * E,E);
+    CHECK_EQ(E * E, E);
+    CHECK_EQ(F * F, F);
+    CHECK_EQ(E * I(4,5), E);
+    CHECK_EQ(I(4,5) * E, E);
+    CHECK_EQ(E * Z, E);
+    CHECK_EQ(Z * E, E);
+    CHECK_EQ(3 * E, E);
+    CHECK_EQ(E * 3, E);
+    CHECK_EQ(E * 0.0, E);
+    CHECK_EQ(0.0 * E, E);
     CHECK_EQ(F * 0,Z);
     CHECK_EQ(I(2,4) * 5, I(10,20));
     CHECK_EQ(I(-inf,max_) * 0,Z);
