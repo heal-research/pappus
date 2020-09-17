@@ -7,6 +7,7 @@ add_library(pappus
     affine/approx.cpp
     affine/common.cpp
     affine/linear.cpp
+    interval.cpp
 )
 
 target_include_directories(pappus PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${EIGEN3_INCLUDE_DIR})

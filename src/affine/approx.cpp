@@ -289,7 +289,7 @@ affine_form affine_form::pow(double exponent) const
     auto fMin = std::pow(min(), exponent);
     auto fMax = std::pow(max(), exponent);
 
-    bool exponent_in_01 = affine_interval(0, 1).contains(exponent);
+    bool exponent_in_01 = interval(0, 1).contains(exponent);
 
     if (context().approximation_mode() == approximation_mode::CHEBYSHEV) {
         beeta = (fMax - fMin) / (2 * radius());
@@ -382,7 +382,7 @@ affine_form affine_form::pow(affine_form const& other) const
                                   dev_b[j] == 0 ? 0 : -2 * eps[j] * dev_b[j]);
             phi -= phi0;
 
-            if (phi_max < phi && affine_interval(0, M_PI).contains(phi)) {
+            if (phi_max < phi && interval(0, M_PI).contains(phi)) {
                 phi_max = phi;
                 last_eps = j;
             }
@@ -404,7 +404,7 @@ affine_form affine_form::pow(affine_form const& other) const
         dmin = std::min(dmin, a);
         dmax = std::max(dmax, b);
 
-        if (!affine_interval(a, b).contains(d2)) {
+        if (!interval(a, b).contains(d2)) {
             if (dev_b[last_eps] == 0) {
                 auto x1log = std::log(x1);
                 if (fy / x1log > 0) {

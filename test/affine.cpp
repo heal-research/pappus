@@ -7,7 +7,7 @@
 #include <Eigen/Eigen>
 
 using af = pappus::affine_form;
-using ai = pappus::affine_interval;
+using ai = pappus::interval;
 
 constexpr double eps = std::numeric_limits<double>::epsilon();
 

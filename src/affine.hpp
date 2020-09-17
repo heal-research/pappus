@@ -35,17 +35,19 @@ struct view {
     }
 
     template <typename T>
-    static auto as_vector(std::vector<T> const& vec) {
+    static auto as_vector(std::vector<T> const& vec)
+    {
         return Eigen::Map<const mat<T>>(vec.data(), vec.size());
     }
 
     template <typename T>
-    static auto as_vector(std::vector<T>& vec) {
+    static auto as_vector(std::vector<T>& vec)
+    {
         return Eigen::Map<mat<T>>(vec.data(), vec.size());
     }
 };
 
-// TODO: 
+// TODO:
 // in my opinion using an epsilon does not really protect from anything or bring more clarity
 // maybe it would be best to avoid "protected division" and just deal with NaN's in a sensible way
 struct limits {
@@ -72,7 +74,7 @@ namespace {
 
 class affine_form {
 public:
-    explicit affine_form(affine_context& context, affine_interval const& interval)
+    explicit affine_form(affine_context& context, interval const& interval)
         : context_(context)
         , center_((interval.upper() + interval.lower()) / 2)
         , radius_(0)
@@ -142,8 +144,9 @@ public:
     }
 
     // replicates method from aaflib
-    double operator[](size_t i) const {
-        return i == 0 ? center_ : deviations_[i-1];
+    double operator[](size_t i) const
+    {
+        return i == 0 ? center_ : deviations_[i - 1];
     }
 
     affine_context& context() const { return context_.get(); }
@@ -166,7 +169,7 @@ public:
 
         if (std::signbit(min_) == std::signbit(max_))
             return std::fmin(std::fabs(min_),
-                             std::fabs(max_));
+                std::fabs(max_));
 
         return 0;
     }
@@ -199,9 +202,9 @@ public:
 
     bool operator==(const affine_form& other) const;
     // interval representation
-    affine_interval to_interval() const
+    interval to_interval() const
     {
-        return affine_interval(min(), max());
+        return interval(min(), max());
     }
 
     // assignment operators
@@ -219,7 +222,7 @@ public:
     affine_form operator-(double) const;
     affine_form operator/(double) const;
     affine_form operator-() const;
-    affine_form pow(int) const;    // TODO:
+    affine_form pow(int) const; // TODO:
     affine_form pow(double) const; // decide if these two need to be separate
 
     affine_form operator+(affine_form const&) const;
