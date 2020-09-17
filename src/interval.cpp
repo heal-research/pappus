@@ -176,4 +176,18 @@ interval& interval::operator-=(interval const& other)
     std::swap(*this, tmp);
     return *this;
 }
+
+interval& interval::operator*=(interval const& other)
+{
+    auto tmp = *this * other;
+    std::swap(*this, tmp);
+    return *this;
+}
+
+interval& interval::operator/=(interval const& other)
+{
+    auto tmp = *this / other;
+    std::swap(*this, tmp);
+    return *this;
+}
 }
