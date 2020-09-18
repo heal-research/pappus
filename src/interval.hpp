@@ -189,6 +189,7 @@ public:
     interval operator-() const;
     interval operator*(interval const& other) const;
     interval operator/(interval const& other) const;
+    interval inv() const;
 
     interval& operator+=(interval const& other);
     interval& operator-=(interval const& other);
@@ -203,8 +204,7 @@ public:
     friend interval operator+(double v, interval const& i) { return i + v; }
     friend interval operator-(double v, interval const& i) { return -i + v; }
     friend interval operator*(double v, interval const& i) { return i * v; }
-
-    interval inv() const;
+    friend interval operator/(double v, interval const& i) { return i.inv() * v; }
 
     template <interval_class C>
     constexpr bool is() const

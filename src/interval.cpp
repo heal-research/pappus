@@ -163,6 +163,17 @@ interval interval::operator/(interval const& other) const
     return interval::empty();
 }
 
+interval interval::inv() const
+{
+    if (is_empty() || is_zero())
+        return interval::empty();
+
+    if (contains_strict(0.0))
+        return interval::infinite();
+
+    return interval(ropd<op_div>(1, upper()), ropu<op_div>(1, lower()));
+}
+
 interval& interval::operator+=(interval const& other)
 {
     auto tmp = *this + other;
