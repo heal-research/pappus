@@ -26,30 +26,10 @@ namespace fp {
     const auto inf = std::numeric_limits<double>::infinity();
     const auto nan = std::numeric_limits<double>::quiet_NaN();
 
-    // these operations respect the semantics of "extended real arithmetic"
-    // necessary to abide to the arithmetic rules underlying IA, details in:
-    // Complete Interval Arithmetic and its Implementation on the Computer
-    // Ulrich W. Kulisch
-    struct op_add {
-        double operator()(double a, double b) { return a + b; }
-    };
-    struct op_sub {
-        double operator()(double a, double b) { return a - b; }
-    };
-    struct op_mul {
-        double operator()(double a, double b) 
-        {
-            // inf * 0 == 0 * inf = 0
-            if (std::isinf(a)) return b == 0 ? 0 : a * b;
-            if (std::isinf(b)) return a == 0 ? 0 : a * b;
-            return a * b; 
-        }
-    };
-    struct op_div {
-        double operator()(double a, double b) {
-            return a / b; 
-        }
-    };
+    using op_add = std::plus<double>;
+    using op_sub = std::minus<double>;
+    using op_mul = std::multiplies<double>;
+    using op_div = std::divides<double>;
 
     template <int ROUND_MODE>
     double from_string(std::string const& s)
