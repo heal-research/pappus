@@ -1,8 +1,11 @@
 let
   pkgs_stable = import <nixos> {};
   pkgs = import <nixos-unstable> {};
+  crlibm = import ./crlibm.nix {
+    pkgs = pkgs;
+    stdenv = pkgs.gcc10Stdenv;
+  };
 in
-#unstable.llvmPackages_10.stdenv.mkDerivation {
 pkgs.gcc10Stdenv.mkDerivation {
     name = "pappus-env";
     hardeningDisable = [ "all" ]; 
@@ -22,6 +25,9 @@ pkgs.gcc10Stdenv.mkDerivation {
         eigen
         doctest
         clang_10
+        openlibm
+        crlibm
+        pkgconfig
         # visualize profile results
         # qcachegrind
       ];

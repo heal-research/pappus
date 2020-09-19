@@ -1,4 +1,5 @@
 #include "interval.hpp"
+#include <iomanip>
 #include <doctest/doctest.h>
 
 namespace dt = doctest;
@@ -13,35 +14,6 @@ using I = pappus::interval;
 const auto F = I::infinite();
 const auto Z = I::zero();
 const auto E = I::empty();
-
-TEST_CASE("extended real arithmetic rules" * dt::test_suite("IA"))
-{
-    const auto x = 1.2345;
-
-    pappus::fp::op_add add {};
-    pappus::fp::op_sub sub {};
-    pappus::fp::op_div div {};
-    pappus::fp::op_mul mul {};
-
-    CHECK_EQ(add(inf, x), inf);
-    CHECK_EQ(add(-inf, x), -inf);
-    CHECK_EQ(add(-inf, -inf), -inf);
-    CHECK_EQ(add(inf, inf), inf);
-    CHECK(std::isnan(sub(inf, inf)));
-    CHECK(std::isnan(add(-inf, inf)));
-
-    CHECK_EQ(mul(-inf, inf), -inf);
-    CHECK_EQ(mul(-inf, -inf), inf);
-    CHECK(std::isnan(mul(0, inf)));
-    CHECK(std::isnan(mul(inf, 0)));
-    CHECK(std::isnan(mul(0, -inf)));
-    CHECK(std::isnan(mul(-inf, 0)));
-
-    CHECK_EQ(div(x, inf), 0);
-    CHECK_EQ(div(x, -inf), 0);
-    CHECK_EQ(div(x, 0), inf);
-    CHECK_EQ(div(x, -0), inf);
-}
 
 TEST_CASE("addition" * dt::test_suite("IA"))
 {
@@ -160,4 +132,45 @@ TEST_CASE("inverse" * dt::test_suite("IA"))
     CHECK_EQ(I(-2,4).inv(), F);
     CHECK_EQ(I(0,2).inv(), I(0.5, inf));
     CHECK_EQ(I(2,4).inv(), I(0.25, 0.5));
+}
+
+TEST_CASE("trigonometric functions" * dt::test_suite("IA"))
+{
+    auto print = [](auto v) { std::cout << std::setprecision(60) << std::fixed << v << "\n"; };
+
+    SUBCASE("sin")
+    {
+        CHECK_EQ(I(0, fp::pi).sin(), I(0, 1));
+        CHECK_EQ(F.sin(), I(-1, 1));
+    }
+
+    SUBCASE("cos")
+    {
+        CHECK_EQ(E.cos(), E);
+        CHECK_EQ(I(-1.0,-0.5).cos(), I("0.540302305868139765010482733487151563167572021484375", 
+                                       "0.8775825618903727587394314468838274478912353515625"));
+        CHECK_EQ(I(-10,10).cos(), I(-1,1));
+        CHECK_EQ(F.cos(), I(-1, 1));
+        CHECK_EQ(I(fp::pi, fp::pi).cos(), I(-1, -1));
+        CHECK_EQ(I(3,3.5).cos(), I("-1","-0.936456687290796341294196736271260306239128112792969")); 
+        CHECK_EQ(I(-3.5,-3).cos(), I("-1","-0.936456687290796341294196736271260306239128112792969"));
+        CHECK_EQ(I(-3.5,3).cos(), I(-1,1));
+
+        CHECK_EQ(I(10,12).cos(), I("-0.83907152907645243811174395887064747512340545654296875",
+                                   "0.84385395873249213760658449245966039597988128662109375"));
+
+        CHECK_EQ(I(13,14).cos(), I("0.1367372182078336051436195930364192463457584381103515625",
+                                   "0.90744678145019619375233332903007976710796356201171875"));
+
+        CHECK_EQ(I(10,14).cos(), I("-0.83907152907645243811174395887064747512340545654296875","1"));
+        CHECK_EQ(I(14,16).cos(), I("-1","0.1367372182078336051436195930364192463457584381103515625"));
+        print(I(14,16).cos().upper());
+        //TEST_EQ(cos(interval(14,16)),interval("[-1,0.136737218207833]"));
+        //TEST_EQ(cos(interval(-11,-10)),interval("[-0.839071529076452,0.004425697988051]"));
+        //TEST_EQ(cos(interval(-14,-13)),interval("[0.136737218207833,0.907446781450197]"));
+        //TEST_EQ(cos(interval(-16,-14)),interval("[-1,0.136737218207833]"));
+        //TEST_EQ(cos(interval(-102,-100)),interval("[0.101585703696621,1]"));
+        //TEST_EQ(cos(interval(4.6e15,4.7e15)),interval(-1,1));
+        //TEST_EQ(cos(interval(4503599627370495,4503599627370496)),interval("[-0.48553486774222065, 0.4732928859543091]"));
+    }
 }

@@ -2,7 +2,9 @@
 #define PAPPUS_INTERVAL_HPP
 
 #include <cassert>
+#include <cmath>
 #include <iostream>
+#include <iomanip>
 #include <limits>
 #include <ostream>
 #include <type_traits>
@@ -11,9 +13,6 @@
 #include "fputil.hpp"
 
 namespace pappus {
-
-namespace {
-}
 
 enum interval_class { M, Z, P, P0, P1, N, N0, N1, NONE };
 
@@ -70,21 +69,11 @@ public:
         return std::pair<double, double>(lower_, upper_);
     }
 
-    double mid() const
-    {
-        // lower
-        auto lo = fp::ropd<fp::op_mul>(lower_, 0.5);
-        // upper
-        auto up = fp::ropu<fp::op_mul>(upper_, 0.5);
-        return lo + up;
-    }
+    double mid() const;
 
-    double radius() const
-    {
-        double m = mid();
-        auto [a, b] = bounds();
-        return std::fmax(fp::ropd<fp::op_sub>(m, a), fp::ropu<fp::op_sub>(b, m));
-    }
+    double radius() const;
+
+    double diameter() const;
 
     bool contains(double v) const
     {
@@ -124,7 +113,7 @@ public:
 
     bool is_zero() const
     {
-        return is<pappus::Z>();
+        return lower() == 0 && upper() == 0;
     }
 
     bool is_symmetric() const
@@ -190,6 +179,13 @@ public:
     interval operator*(interval const& other) const;
     interval operator/(interval const& other) const;
     interval inv() const;
+    interval exp() const;
+    interval log() const;
+    interval sin() const;
+    interval cos() const;
+    interval tan() const;
+    interval square() const;
+    interval pow(interval const& other) const;
 
     interval& operator+=(interval const& other);
     interval& operator-=(interval const& other);
@@ -200,14 +196,17 @@ public:
     interval operator-(double v) const;
     interval operator*(double v) const;
     interval operator/(double v) const;
+    interval pow(double v) const;
 
+    // friends
     friend interval operator+(double v, interval const& i) { return i + v; }
     friend interval operator-(double v, interval const& i) { return -i + v; }
     friend interval operator*(double v, interval const& i) { return i * v; }
     friend interval operator/(double v, interval const& i) { return i.inv() * v; }
+    friend interval pow(double v, interval const& i) { return interval(+0.0, -0.0); };
 
     template <interval_class C>
-    constexpr bool is() const
+    bool is() const
     {
         static_assert(C >= interval_class::M && C <= interval_class::N1, "Unknown interval class.");
         auto [a, b] = bounds();
@@ -233,9 +232,10 @@ public:
         }
     }
 
-    static interval empty() { return interval(+fp::nan, -fp::nan); }
+    // constants
+    static interval empty()    { return interval(+fp::nan, -fp::nan); }
+    static interval zero()     { return interval(+0.0, -0.0); }
     static interval infinite() { return interval(-fp::inf, +fp::inf); }
-    static interval zero() { return interval(+0.0, -0.0); }
 
 private:
     double lower_;
@@ -248,6 +248,9 @@ private:
         // -0 used for right endpoints while +0 is used for left endpoints
         if (lo == 0) lo = +0.0;
         if (hi == 0) hi = -0.0;
+        if (lo > hi) {
+            std::cout << std::setprecision(53) << "lo: " << lo << ", hi: " << hi << "\n";
+        }
         EXPECT(!(lo > hi));
         return std::pair<double, double>(lo, hi);
     }
@@ -258,6 +261,9 @@ private:
     {
     }
 };
+
+namespace interval_constants {
+}
 
 }
 
