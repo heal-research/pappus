@@ -14,3 +14,7 @@ target_include_directories(pappus PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${EIGEN3_IN
 target_compile_features(pappus PRIVATE cxx_std_17)
 target_link_libraries(pappus PRIVATE crlibm)
 target_compile_definitions(pappus PRIVATE "$<$<BOOL:${USE_CRLIBM}>:USE_CRLIBM>")
+
+if(CMAKE_EXPORT_COMPILE_COMMANDS)
+    set(CMAKE_CXX_STANDARD_INCLUDE_DIRECTORIES ${CMAKE_CXX_IMPLICIT_INCLUDE_DIRECTORIES})
+endif()

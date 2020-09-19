@@ -6,6 +6,7 @@
 
 #include <stdexcept>
 #include <vector>
+#include <optional>
 
 #include <Eigen/Eigen>
 
@@ -16,7 +17,7 @@
 namespace pappus {
 
 template <typename T>
-using array = Eigen::Array<T, Eigen::Dynamic, 1>;
+using arr = Eigen::Array<T, Eigen::Dynamic, 1>;
 
 template <typename T>
 using mat = Eigen::Matrix<T, Eigen::Dynamic, 1>;
@@ -25,13 +26,13 @@ struct view {
     template <typename T>
     static auto as_array(std::vector<T> const& vec)
     {
-        return Eigen::Map<const array<T>>(vec.data(), vec.size());
+        return Eigen::Map<const arr<T>>(vec.data(), vec.size());
     }
 
     template <typename T>
     static auto as_array(std::vector<T>& vec)
     {
-        return Eigen::Map<array<T>>(vec.data(), vec.size());
+        return Eigen::Map<arr<T>>(vec.data(), vec.size());
     }
 
     template <typename T>
@@ -144,7 +145,7 @@ public:
     }
 
     // replicates method from aaflib
-    double operator[](size_t i) const
+    double operator[](std::size_t i) const
     {
         return i == 0 ? center_ : deviations_[i - 1];
     }

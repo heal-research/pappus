@@ -5,8 +5,6 @@
 #include <cmath>
 #include <sstream>
 
-#include "crlibm.h"
-
 #define EXPECT(cond)                                                                                    \
     if (!(cond)) {                                                                                      \
         std::cout << "precondition " << #cond << " failed at " << __FILE__ << ": " << __LINE__ << "\n"; \
@@ -32,14 +30,18 @@ namespace fp {
     template <int ROUND_MODE>
     double from_string(std::string const& s)
     {
+#if defined(DIRECTED_ROUNDING)
         static_assert(ROUND_MODE == FE_UPWARD || ROUND_MODE == FE_DOWNWARD);
         auto rnd = std::fegetround();
         std::fesetround(ROUND_MODE);
+#endif
         std::istringstream is(s);
         double v;
         is.precision(std::numeric_limits<double>::max_digits10);
         is >> v;
+#if defined(DIRECTED_ROUNDING)
         std::fesetround(rnd);
+#endif
         return v;
     }
 }

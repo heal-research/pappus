@@ -2,6 +2,9 @@
 #define PAPPUS_FPOPS_HPP
 
 #include "fputil.hpp"
+#if defined(USE_CRLIBM)
+#include <crlibm.h>
+#endif
 
 namespace pappus {
 namespace fp {
@@ -22,13 +25,17 @@ namespace fp {
     template<int ROUND_MODE, typename OP, typename... Args>
     double rop(Args... args)
     {
-        static_assert(ROUND_MODE == FE_UPWARD || ROUND_MODE == FE_DOWNWARD);
         static_assert(std::is_invocable_r_v<double, OP, Args...>);
+#if !defined(DIRECTED_ROUNDING)
+        return OP()(args...);
+#else
+        static_assert(ROUND_MODE == FE_UPWARD || ROUND_MODE == FE_DOWNWARD);
         auto rnd = std::fegetround();
         std::fesetround(ROUND_MODE);
         auto c = OP()(args...);
         std::fesetround(rnd);
         return c;
+#endif
     }
 
 #if defined(USE_CRLIBM)
