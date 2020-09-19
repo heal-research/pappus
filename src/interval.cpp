@@ -312,7 +312,6 @@ interval interval::square() const
     if (b <= 0)
         return interval(D(b,b), U(a,a));
 
-    EXPECT(contains_strict(0.0));
     return interval(0.0, std::fmax(U(a,a), U(b,b)));
 }
 

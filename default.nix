@@ -27,7 +27,9 @@ pkgs.gcc10Stdenv.mkDerivation {
         clang_10
         openlibm
         crlibm
+        mpfi
         pkgconfig
+        pkgs_stable.julia_11
         # visualize profile results
         # qcachegrind
       ];

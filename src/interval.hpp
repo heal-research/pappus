@@ -156,7 +156,8 @@ public:
 
     bool operator==(interval const& other) const
     {
-        return (is_empty() && other.is_empty()) || (lower() == other.lower() && upper() == other.upper());
+        return (is_empty() && other.is_empty()) ||
+            (lower() == other.lower() && upper() == other.upper());
     }
 
     bool operator<(interval const& other) const

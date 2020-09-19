@@ -20,8 +20,8 @@ if(USE_CRLIBM AND NOT DIRECTED_ROUNDING)
 endif()
 
 if(BUILD_TESTS)
-    if (USE_CRLIBM)
-        message(WARNING "Option USE_CRLIBM=ON may cause some unit tests to fail.")
+    if (NOT USE_CRLIBM)
+        message(WARNING "Unit tests may fail without USE_CRLIBM=ON.")
     endif()
     FetchContent_Declare(
         aaflib
