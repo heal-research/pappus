@@ -139,6 +139,7 @@ TEST_CASE("trigonometric functions" * dt::test_suite("IA"))
     SUBCASE("sin")
     {
         CHECK_EQ(I(0, fp::pi).sin(), I(0, 1));
+        CHECK_EQ(I(0,0).sin(), I(0,0));
         CHECK_EQ(F.sin(), I(-1, 1));
         CHECK_EQ(I(-1.0,-0.5).sin(),I(-0.8414709848078966, -0.47942553860420295));
         CHECK_EQ(I(-10,10).sin(), I(-1,1));
@@ -162,6 +163,7 @@ TEST_CASE("trigonometric functions" * dt::test_suite("IA"))
     {
         CHECK_EQ(F.cos(), I(-1, 1));
         CHECK_EQ(E.cos(), E);
+        CHECK_EQ(I(0,0).cos(), I(1,1));
         CHECK_EQ(I(-1.0,-0.5).cos(),I(0.5403023058681397, 0.8775825618903728));
         CHECK_EQ(I(-10,10).cos(), I(-1,1));
         CHECK_EQ(I(fp::pi, fp::pi).cos(), I(-1, -0.9999999999999999));

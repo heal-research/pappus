@@ -271,7 +271,7 @@ interval interval::sin() const
 
 interval interval::cos() const
 {
-    if (is_empty() || is_zero())
+    if (is_empty())
         return *this;
 
     if (is_infinite() || radius() > two_pi)
