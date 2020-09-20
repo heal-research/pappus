@@ -39,7 +39,7 @@ double interval::diameter() const
     if (is_empty())
         return num::quiet_NaN();
 
-    return ropu<op_sub>(upper() - lower());
+    return ropu<op_sub>(upper(), lower());
 }
 
 interval interval::operator+() const
@@ -233,7 +233,7 @@ interval interval::sin() const
     if (is_empty() || is_zero())
         return *this;
 
-    if (is_infinite() || radius() > two_pi)
+    if (is_infinite() || diameter() > two_pi)
         return interval(-1, 1);
 
     auto [a, b] = bounds();
@@ -274,7 +274,7 @@ interval interval::cos() const
     if (is_empty())
         return *this;
 
-    if (is_infinite() || radius() > two_pi)
+    if (is_infinite() || diameter() > two_pi)
         return interval(-1, 1);
 
     auto [a, b] = bounds();
