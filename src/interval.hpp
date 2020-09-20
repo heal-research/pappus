@@ -66,7 +66,7 @@ public:
 
     std::pair<double, double> bounds() const
     {
-        return std::pair<double, double>(lower_, upper_);
+        return std::pair<double, double>(lower(), upper());
     }
 
     double mid() const;
@@ -131,45 +131,64 @@ public:
         return is_empty() || (lower() > 0.0);
     }
 
+    std::pair<interval, interval> split() const
+    {
+        auto left = interval { lower(), mid() };
+        auto right = interval { std::nextafter(mid(), upper()), upper() };
+        return std::make_pair(left, right);
+    }
+
     // intersection
     interval operator&(interval const& other) const
     {
-        auto lo = std::max(lower(), other.lower());
-        auto hi = std::min(upper(), other.upper());
-        return interval(lo, hi);
+        if (is_empty() || other.is_empty())
+            return interval::empty();
+
+        if (upper() < other.lower() || other.upper() < lower())
+            return interval::empty();
+
+        return interval(std::fmax(lower(), other.lower()), std::fmin(upper(), other.upper()));
     }
 
-    // union
+    // technically this is the hull (not union) 
     interval operator|(interval const& other) const
     {
-        auto lo = std::min(lower(), other.lower());
-        auto hi = std::max(upper(), other.upper());
-        return interval(lo, hi);
+        if (is_empty()) 
+            return other;
+
+        if (other.is_empty()) 
+            return *this;
+
+        return interval(std::fmin(lower(), other.lower()), std::fmax(upper(), other.upper()));
     }
 
-    // printing
-    friend std::ostream& operator<<(std::ostream& s, interval const& interval)
-    {
-        s << "[" << interval.lower() << ", " << interval.upper() << "]";
-        return s;
-    }
-
+    // this assumes set semantics where two intervals
+    // are equal if they have the same bounds
     bool operator==(interval const& other) const
     {
         return (is_empty() && other.is_empty()) ||
             (lower() == other.lower() && upper() == other.upper());
     }
 
-    bool operator<(interval const& other) const
+    bool operator!=(interval const& other) const
     {
-        return lower() <= other.lower() && upper() <= other.upper();
+        return !(*this == other);
     }
 
-    std::pair<interval, interval> split() const
+    bool operator<(interval const& other) const
     {
-        auto left = interval { lower(), mid() };
-        auto right = interval { std::nextafter(mid(), upper()), upper() };
-        return std::make_pair(left, right);
+        if (is_empty())
+            return !other.is_empty();
+
+        return upper() < other.lower();
+    }
+
+    bool operator<=(interval const& other) const
+    {
+        if (is_empty())
+            return true;
+
+        return upper() <= other.lower();
     }
 
     // arithmetic operators
@@ -233,6 +252,13 @@ public:
         }
     }
 
+    // printing
+    friend std::ostream& operator<<(std::ostream& s, interval const& interval)
+    {
+        s << "[" << interval.lower() << ", " << interval.upper() << "]";
+        return s;
+    }
+
     // constants
     static interval empty()    { return interval(+fp::nan, -fp::nan); }
     static interval zero()     { return interval(+0.0, -0.0); }
@@ -263,9 +289,5 @@ private:
     }
 };
 
-namespace interval_constants {
-}
-
-}
-
+} // namespace
 #endif

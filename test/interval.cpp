@@ -180,3 +180,21 @@ TEST_CASE("trigonometric functions" * dt::test_suite("IA"))
         CHECK_EQ(I(4503599627370495,4503599627370496).cos(), I(-0.48553486774222065,0.4732928859543091));
     }
 }
+
+TEST_CASE("interval splitting")
+{
+    auto f = [](I const& x) { return x * x; };
+    auto max_depth = 2;
+    auto rec = [&](I const& i, size_t d, auto&& rec) -> I
+    {
+        auto [l, r] = i.split();
+        auto result = d >= max_depth
+            ? f(l) | f(r)
+            : rec(l, d+1, rec) | rec(r, d+1, rec);
+        return result;
+    };
+    auto x = I(-1, 1);
+    std::cout << "x: " << x << ", f(x): " << f(x) << "\n";
+    I z = rec(x, 1, rec);
+    std::cout << "z = " << z << "\n";
+}

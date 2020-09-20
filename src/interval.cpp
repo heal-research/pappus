@@ -6,27 +6,40 @@
 namespace pappus {
 
 using namespace pappus::fp;
+using num = std::numeric_limits<double>;
 
 double interval::mid() const
 {
-        // lower
-        auto lo = fp::ropd<fp::op_mul>(lower_, 0.5);
-        // upper
-        auto up = fp::ropu<fp::op_mul>(upper_, 0.5);
-        return lo + up;
+    if (is_empty())
+        return num::quiet_NaN();
+
+    if (is_infinite())
+        return 0.0;
+
+    if (std::isinf(lower()))
+        return num::lowest();
+
+    if (std::isinf(upper()))
+        return num::max();
+
+    return ropd<op_mul>(lower(), 0.5) + ropu<op_mul>(upper(), 0.5);
 }
 
 double interval::radius() const
 {
-        double m = mid();
-        auto [a, b] = bounds();
-        return std::fmax(fp::ropd<fp::op_sub>(m, a), fp::ropu<fp::op_sub>(b, m));
+    if (is_empty())
+        return num::quiet_NaN();
+
+    double m = mid();
+    return std::fmax(ropd<op_sub>(m, lower()), ropu<op_sub>(upper(), m));
 }
 
 double interval::diameter() const
 {
-        auto [a, b] = bounds();
-        return std::fmax(fp::ropd<fp::op_sub>(b, a), fp::ropu<fp::op_sub>(b, a));
+    if (is_empty())
+        return num::quiet_NaN();
+
+    return ropu<op_sub>(upper() - lower());
 }
 
 interval interval::operator+() const
@@ -231,7 +244,7 @@ interval interval::sin() const
     const auto U = [](auto x) { return ropu<op_sin>(x); };
 
     if (x == y) { // same quadrant
-        if (diameter() > fp::pi) // wrap around
+        if (diameter() > pi) // wrap around
             return interval(-1.0, 1.0);
 
         if (x == 0 || x == 3) // Q1,Q4: increasing
@@ -272,7 +285,7 @@ interval interval::cos() const
     const auto U = [](auto x) { return ropu<op_cos>(x); };
 
     if (x == y) { // same quadrant
-        if (diameter() > fp::pi) // wrap around
+        if (diameter() > pi) // wrap around
             return interval(-1.0, 1.0);
 
         if (x == 0 || x == 1)
