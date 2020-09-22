@@ -245,7 +245,7 @@ interval interval::sin() const
 
     if (x == y) { // same quadrant
         if (diameter() > pi) // wrap around
-            return interval(-1.0, 1.0);
+            return interval(-1, 1);
 
         if (x == 0 || x == 3) // Q1,Q4: increasing
             return interval(D(a), U(b));
@@ -286,7 +286,7 @@ interval interval::cos() const
 
     if (x == y) { // same quadrant
         if (diameter() > pi) // wrap around
-            return interval(-1.0, 1.0);
+            return interval(-1, 1);
 
         if (x == 0 || x == 1)
             return interval(D(b), U(a));
@@ -308,6 +308,28 @@ interval interval::cos() const
     }
 
     return interval(-1, 1);
+}
+
+interval interval::tan() const
+{
+    if (is_empty())
+        return *this;
+
+    if (diameter() > pi)
+        return interval::infinite(); 
+
+    auto [a, b] = bounds();
+    auto x = trig::get_quadrant(a);
+    auto y = trig::get_quadrant(b);
+
+    auto m = std::fmod(x, 2);
+    auto n = std::fmod(y, 2);
+
+    if (m <= n && x < y) {
+        return interval::infinite();
+    }
+
+    return interval(ropd<op_tan>(a), ropu<op_tan>(b));
 }
 
 interval interval::square() const
