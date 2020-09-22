@@ -3,17 +3,18 @@
 
 #include <cfenv>
 #include <cmath>
+#include <iostream>
 #include <sstream>
 
 #define EXPECT(cond)                                                                                    \
     if (!(cond)) {                                                                                      \
-        std::cout << "precondition " << #cond << " failed at " << __FILE__ << ": " << __LINE__ << "\n"; \
+        std::cerr << "precondition " << #cond << " failed at " << __FILE__ << ": " << __LINE__ << "\n"; \
         std::terminate();                                                                               \
     }
 
 #define ENSURE(cond)                                                                                     \
     if (!(cond)) {                                                                                       \
-        std::cout << "postcondition " << #cond << " failed at " << __FILE__ << ": " << __LINE__ << "\n"; \
+        std::cerr << "postcondition " << #cond << " failed at " << __FILE__ << ": " << __LINE__ << "\n"; \
         std::terminate();                                                                                \
     }
 

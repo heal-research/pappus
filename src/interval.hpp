@@ -3,8 +3,6 @@
 
 #include <cassert>
 #include <cmath>
-#include <iostream>
-#include <iomanip>
 #include <limits>
 #include <ostream>
 #include <type_traits>
@@ -20,6 +18,9 @@ class interval {
 public:
     interval()
         : interval(0, 0)
+    {
+    }
+    explicit interval(double v) : interval(v, v)
     {
     }
     explicit interval(double l, double h)
@@ -150,6 +151,13 @@ public:
         return interval(std::fmax(lower(), other.lower()), std::fmin(upper(), other.upper()));
     }
 
+    interval& operator&=(interval const& other)
+    {
+        auto tmp = *this & other;
+        std::swap(*this, tmp);
+        return *this;
+    }
+
     // technically this is the hull (not union) 
     interval operator|(interval const& other) const
     {
@@ -160,6 +168,13 @@ public:
             return *this;
 
         return interval(std::fmin(lower(), other.lower()), std::fmax(upper(), other.upper()));
+    }
+
+    interval& operator|=(interval const& other)
+    {
+        auto tmp = *this | other;
+        std::swap(*this, tmp);
+        return *this;
     }
 
     // this assumes set semantics where two intervals
@@ -275,9 +290,6 @@ private:
         // -0 used for right endpoints while +0 is used for left endpoints
         if (lo == 0) lo = +0.0;
         if (hi == 0) hi = -0.0;
-        if (lo > hi) {
-            std::cout << std::setprecision(53) << "lo: " << lo << ", hi: " << hi << "\n";
-        }
         EXPECT(!(lo > hi));
         return std::pair<double, double>(lo, hi);
     }
