@@ -219,6 +219,9 @@ public:
     interval sin() const;
     interval cos() const;
     interval tan() const;
+    interval asin() const;
+    interval acos() const;
+    interval atan() const;
     interval square() const;
     interval pow(interval const& other) const;
 
@@ -278,6 +281,12 @@ public:
     static interval empty()    { return interval(+fp::nan, -fp::nan); }
     static interval zero()     { return interval(+0.0, -0.0); }
     static interval infinite() { return interval(-fp::inf, +fp::inf); }
+
+    static interval force_interval(double a, double b)
+    {
+        if (a > b) std::swap(a, b);
+        return interval(a, b);
+    }
 
 private:
     double lower_;

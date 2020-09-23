@@ -22,6 +22,9 @@ namespace fp {
     struct op_sin  { double operator()(double a) { return std::sin(a); } }; 
     struct op_cos  { double operator()(double a) { return std::cos(a); } }; 
     struct op_tan  { double operator()(double a) { return std::tan(a); } }; 
+    struct op_asin { double operator()(double a) { return std::asin(a); } };
+    struct op_acos { double operator()(double a) { return std::acos(a); } };
+    struct op_atan { double operator()(double a) { return std::atan(a); } };
     struct op_fmod { double operator()(double a, double b) { return std::fmod(a, b); } };
 
     template<int ROUND_MODE, typename OP, typename... Args>
@@ -54,6 +57,9 @@ namespace fp {
     template<> double ropd<op_sin>(double a) { return sin_rd(a); }
     template<> double ropd<op_cos>(double a) { return cos_rd(a); }
     template<> double ropd<op_tan>(double a) { return tan_rd(a); }
+    template<> double ropd<op_asin>(double a) { return asin_rd(a); }
+    template<> double ropd<op_acos>(double a) { return acos_rd(a); }
+    template<> double ropd<op_atan>(double a) { return atan_rd(a); }
 
     template<typename OP = op_add>
     double ropu(double a, double b) { return rop<FE_UPWARD, OP>(a, b); }
@@ -68,6 +74,9 @@ namespace fp {
     template<> double ropu<op_sin>(double a) { return sin_ru(a); }
     template<> double ropu<op_cos>(double a) { return cos_ru(a); }
     template<> double ropu<op_tan>(double a) { return tan_ru(a); }
+    template<> double ropu<op_asin>(double a) { return asin_ru(a); }
+    template<> double ropu<op_acos>(double a) { return acos_ru(a); }
+    template<> double ropu<op_atan>(double a) { return atan_ru(a); }
 #else    
     template<typename OP, typename... Args>
     constexpr auto ropd = [](auto&& ...args) { return rop<FE_DOWNWARD, OP, Args...>(args...); };

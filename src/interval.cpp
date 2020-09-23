@@ -332,6 +332,29 @@ interval interval::tan() const
     return interval(ropd<op_tan>(a), ropu<op_tan>(b));
 }
 
+interval interval::asin() const
+{
+    auto t = *this & interval(-1, 1);
+    if (t.is_empty())
+        return interval::empty();
+    return interval(ropd<op_asin>(t.lower()), ropu<op_asin>(t.upper()));
+}
+
+interval interval::acos() const
+{
+    auto t = *this & interval(-1, 1);
+    if (t.is_empty())
+        return interval::empty();
+    return interval(ropd<op_acos>(t.upper()), ropu<op_acos>(t.lower()));
+}
+
+interval interval::atan() const
+{
+    if (is_empty())
+        return interval::empty();
+    return interval(ropd<op_atan>(lower()), ropu<op_atan>(upper()));
+}
+
 interval interval::square() const
 {
     if (is_zero() || is_empty())

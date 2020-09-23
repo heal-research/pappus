@@ -17,6 +17,7 @@ const auto E = I::empty();
 TEST_CASE("interval")
 {
     CHECK_EQ(I(0, fp::pi).diameter(), fp::pi);
+    CHECK_EQ(I::force_interval(3, 2), I(2, 3));
 }
 
 TEST_CASE("addition" * dt::test_suite("IA"))
@@ -206,6 +207,29 @@ TEST_CASE("trigonometric functions" * dt::test_suite("IA"))
         CHECK_EQ(I(0.5, 1.67).tan(), F);
         CHECK_EQ(I(1.67, 3.2).tan(), I(-10.047182299210307, 0.05847385445957865));
         CHECK_EQ(I(6.638314112824137, 8.38263151220128).tan(), F);
+        CHECK_EQ(I(0.0, 1.0).tan(), I(0.0, 1.55740772465490223051));
+        CHECK_EQ(I(-1.0, 0.0).tan(), I(-1.55740772465490223051, 0.0));
+        CHECK_EQ(I(-2.0, -1.0).tan(), F);
+        CHECK_EQ(I(202, 203).tan(), F);
+    }
+
+    SUBCASE("asin")
+    {
+        CHECK_EQ(E.asin(), E);
+        CHECK_EQ(I(-6, -3).asin(), E);
+        CHECK_EQ(I(0.9, 2).asin(), I(0.9, 1).asin());
+        CHECK_EQ(I(3, 4).asin(), E);
+        CHECK_EQ(I(3, 5).asin(), E);
+        CHECK_EQ(I(-1.5, -0.5).asin(), I(-1.57079632679489678,-0.5235987755982988));
+        CHECK_EQ(I(-0.5, 0.5).asin(), I(-0.52359877559829887308,0.52359877559829887308));
+        CHECK_EQ(I("0.1").asin(), I(0.100167421161559799802631687271, 0.100167421161559813680419495086));
+    }
+
+    SUBCASE("acos")
+    {
+        CHECK_EQ(I(-1.5, -0.5).acos(), I(2.09439510239319526, 3.14159265358979356));
+        CHECK_EQ(I(-0.5,0.5).acos(), I(1.04719755119659763132, 2.0943951023931957067));
+        CHECK_EQ(I("0.1").acos(), I(1.4706289056333368137075, 1.4706289056333370357521));
     }
 }
 
