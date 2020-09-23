@@ -25,7 +25,7 @@ namespace fp {
     struct op_fmod { double operator()(double a, double b) { return std::fmod(a, b); } };
 
     template<int ROUND_MODE, typename OP, typename... Args>
-    double rop(Args... args)
+    double rop(Args&& ...args)
     {
         static_assert(std::is_invocable_r_v<double, OP, Args...>);
 #if !defined(DIRECTED_ROUNDING)
