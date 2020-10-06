@@ -2,7 +2,7 @@
 #define PAPPUS_AF_HPP
 
 #include "context.hpp"
-#include "interval.hpp"
+#include "interval/interval.hpp"
 
 #include <stdexcept>
 #include <vector>
@@ -77,13 +77,13 @@ class affine_form {
 public:
     explicit affine_form(affine_context& context, interval const& interval)
         : context_(context)
-        , center_((interval.upper() + interval.lower()) / 2)
+        , center_(interval.mid())
         , radius_(0)
         , deviations_(1)
         , indices_(1)
         , length_(1)
     {
-        deviations_[0] = (interval.upper() - interval.lower()) / 2;
+        deviations_[0] = interval.radius();
         indices_[0] = this->context().increment_last(); // assign and increment global index
         update_radius();
     }

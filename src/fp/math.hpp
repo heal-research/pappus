@@ -1,7 +1,7 @@
 #ifndef PAPPUS_FPOPS_HPP
 #define PAPPUS_FPOPS_HPP
 
-#include "fputil.hpp"
+#include "util.hpp"
 #include <type_traits>
 #if defined(USE_CRLIBM)
 #include <crlibm.h>
@@ -15,6 +15,7 @@ namespace fp {
     using op_mul = std::multiplies<double>;
     using op_div = std::divides<double>;
     struct op_pow { double operator()(double a, double b) { return std::pow(a, b); } };
+    struct op_abs { double operator()(double a) { return std::fabs(a); } };
 
     // unary operations
     struct op_exp  { double operator()(double a) { return std::exp(a); } }; 
@@ -26,6 +27,9 @@ namespace fp {
     struct op_acos { double operator()(double a) { return std::acos(a); } };
     struct op_atan { double operator()(double a) { return std::atan(a); } };
     struct op_fmod { double operator()(double a, double b) { return std::fmod(a, b); } };
+    struct op_sinh { double operator()(double a) { return std::sinh(a); } };
+    struct op_cosh { double operator()(double a) { return std::cosh(a); } };
+    struct op_tanh { double operator()(double a) { return std::tanh(a); } };
 
     template<int ROUND_MODE, typename OP, typename... Args>
     double rop(Args&& ...args)
@@ -60,6 +64,10 @@ namespace fp {
     template<> double ropd<op_asin>(double a) { return asin_rd(a); }
     template<> double ropd<op_acos>(double a) { return acos_rd(a); }
     template<> double ropd<op_atan>(double a) { return atan_rd(a); }
+    template<> double ropd<op_sinh>(double a) { return sinh_rd(a); }
+    template<> double ropd<op_cosh>(double a) { return cosh_rd(a); }
+    template<> double ropd<op_tanh>(double a) { return sinh_rd(a) / cosh_rd(a); }
+    template<> double ropd<op_abs>(double a) { return std::abs(a); }
 
     template<typename OP = op_add>
     double ropu(double a, double b) { return rop<FE_UPWARD, OP>(a, b); }
@@ -77,6 +85,10 @@ namespace fp {
     template<> double ropu<op_asin>(double a) { return asin_ru(a); }
     template<> double ropu<op_acos>(double a) { return acos_ru(a); }
     template<> double ropu<op_atan>(double a) { return atan_ru(a); }
+    template<> double ropu<op_sinh>(double a) { return sinh_ru(a); }
+    template<> double ropu<op_cosh>(double a) { return cosh_ru(a); }
+    template<> double ropu<op_tanh>(double a) { return sinh_ru(a) / cosh_rd(a); }
+    template<> double ropu<op_abs>(double a) { return std::abs(a); }
 #else    
     template<typename OP, typename... Args>
     constexpr auto ropd = [](auto&& ...args) { return rop<FE_DOWNWARD, OP, Args...>(args...); };

@@ -1,5 +1,5 @@
 #include "interval.hpp"
-#include "fpops.hpp"
+#include "fp/math.hpp"
 
 #include <cmath>
 
@@ -16,13 +16,13 @@ double interval::mid() const
     if (is_infinite())
         return 0.0;
 
-    if (std::isinf(lower()))
+    if (std::isinf(inf()))
         return num::lowest();
 
-    if (std::isinf(upper()))
+    if (std::isinf(sup()))
         return num::max();
 
-    return ropd<op_mul>(lower(), 0.5) + ropu<op_mul>(upper(), 0.5);
+    return ropd<op_mul>(inf(), 0.5) + ropu<op_mul>(sup(), 0.5);
 }
 
 double interval::radius() const
@@ -31,7 +31,7 @@ double interval::radius() const
         return num::quiet_NaN();
 
     double m = mid();
-    return std::fmax(ropd<op_sub>(m, lower()), ropu<op_sub>(upper(), m));
+    return std::fmax(ropd<op_sub>(m, inf()), ropu<op_sub>(sup(), m));
 }
 
 double interval::diameter() const
@@ -39,7 +39,34 @@ double interval::diameter() const
     if (is_empty())
         return num::quiet_NaN();
 
-    return ropu<op_sub>(upper(), lower());
+    return ropu<op_sub>(sup(), inf());
+}
+
+double interval::mig() const {
+    if (is_empty())
+        return fp::nan;
+
+    if (contains(0))
+        return 0;
+
+    return std::min(ropd<op_abs>(inf()), ropd<op_abs>(sup()));
+}
+
+double interval::mag() const {
+    if (is_empty())
+        return fp::nan;
+
+    return std::max(ropd<op_abs>(inf()), ropd<op_abs>(sup()));
+}
+
+// divide this interval into n segments and return the ith segment
+interval interval::segment(std::size_t i, std::size_t n) const
+{
+        EXPECT(i < n);
+        auto h = diameter() / n;
+        auto a = ropd<op_add>(inf(), i * h);
+        auto b = ropu<op_add>(inf(), (i+1) * h);
+        return interval(a, b);
 }
 
 interval interval::operator+() const
@@ -49,10 +76,10 @@ interval interval::operator+() const
 
 interval interval::operator+(double v) const
 {
-    return interval(ropd<op_add>(lower(), v), ropu<op_add>(upper(), v));
+    return interval(ropd<op_add>(inf(), v), ropu<op_add>(sup(), v));
 }
 
-interval interval::operator+(interval const& other) const
+interval interval::operator+(interval const other) const
 {
     auto [a, b] = bounds();
     auto [c, d] = other.bounds();
@@ -61,15 +88,15 @@ interval interval::operator+(interval const& other) const
 
 interval interval::operator-() const
 {
-    return interval(-upper(), -lower());
+    return interval(-sup(), -inf());
 }
 
 interval interval::operator-(double v) const
 {
-    return interval(ropd<op_sub>(lower(), v), ropu<op_sub>(upper(), v));
+    return interval(ropd<op_sub>(inf(), v), ropu<op_sub>(sup(), v));
 }
 
-interval interval::operator-(interval const& other) const
+interval interval::operator-(interval const other) const
 {
     auto [a, b] = bounds();
     auto [c, d] = other.bounds();
@@ -85,11 +112,11 @@ interval interval::operator*(double v) const
         return interval::zero();
 
     return v < 0
-        ? interval(ropd<op_mul>(upper(), v), ropu<op_mul>(lower(), v))
-        : interval(ropd<op_mul>(lower(), v), ropu<op_mul>(upper(), v));
+        ? interval(ropd<op_mul>(sup(), v), ropu<op_mul>(inf(), v))
+        : interval(ropd<op_mul>(inf(), v), ropu<op_mul>(sup(), v));
 }
 
-interval interval::operator*(interval const& other) const
+interval interval::operator*(interval const other) const
 {
     if (is_empty() || other.is_empty())
         return interval::empty();
@@ -143,11 +170,11 @@ interval interval::operator/(double v) const
         return interval::empty();
 
     return v < 0
-        ? interval(ropd<op_div>(upper(), v), ropu<op_div>(lower(), v))
-        : interval(ropd<op_div>(lower(), v), ropu<op_div>(upper(), v));
+        ? interval(ropd<op_div>(sup(), v), ropu<op_div>(inf(), v))
+        : interval(ropd<op_div>(inf(), v), ropu<op_div>(sup(), v));
 }
 
-interval interval::operator/(interval const& other) const
+interval interval::operator/(interval const other) const
 {
     if (is_empty() || other.is_empty() || other.is_zero())
         return interval::empty();
@@ -209,23 +236,23 @@ interval interval::inv() const
     if (contains_strict(0.0))
         return interval::infinite();
 
-    return interval(ropd<op_div>(1, upper()), ropu<op_div>(1, lower()));
+    return interval(ropd<op_div>(1, sup()), ropu<op_div>(1, inf()));
 }
 
 interval interval::exp() const
 {
     // ensure that the result is strictly positive
-    return interval(std::fmax(0.0, ropd<op_exp>(lower())), ropu<op_exp>(upper()));
+    return interval(std::fmax(0.0, ropd<op_exp>(inf())), ropu<op_exp>(sup()));
 }
 
 interval interval::log() const
 {
     // cannot take log of a negative interval
-    if (upper() < 0)
+    if (sup() < 0)
         return interval::empty();
 
-    auto i = interval(std::fmax(0.0, lower()), upper());
-    return interval(ropd<op_log>(lower()), ropu<op_log>(upper()));
+    auto i = interval(std::fmax(0.0, inf()), sup());
+    return interval(ropd<op_log>(inf()), ropu<op_log>(sup()));
 }
 
 interval interval::sin() const
@@ -337,7 +364,7 @@ interval interval::asin() const
     auto t = *this & interval(-1, 1);
     if (t.is_empty())
         return interval::empty();
-    return interval(ropd<op_asin>(t.lower()), ropu<op_asin>(t.upper()));
+    return interval(ropd<op_asin>(t.inf()), ropu<op_asin>(t.sup()));
 }
 
 interval interval::acos() const
@@ -345,14 +372,38 @@ interval interval::acos() const
     auto t = *this & interval(-1, 1);
     if (t.is_empty())
         return interval::empty();
-    return interval(ropd<op_acos>(t.upper()), ropu<op_acos>(t.lower()));
+    return interval(ropd<op_acos>(t.sup()), ropu<op_acos>(t.inf()));
 }
 
 interval interval::atan() const
 {
     if (is_empty())
         return interval::empty();
-    return interval(ropd<op_atan>(lower()), ropu<op_atan>(upper()));
+    return interval(ropd<op_atan>(inf()), ropu<op_atan>(sup()));
+}
+
+interval interval::sinh() const
+{
+    if (is_empty())
+        return interval::empty();
+
+    return interval(ropd<op_sinh>(inf()), ropu<op_sinh>(sup()));
+}
+
+interval interval::cosh() const
+{
+    if (is_empty())
+        return interval::empty();
+
+    return interval(ropd<op_cosh>(mig()), ropu<op_cosh>(mag()));
+}
+
+interval interval::tanh() const
+{
+    if (is_empty())
+        return interval::empty();
+
+    return interval(ropd<op_tanh>(inf()), ropu<op_tanh>(sup()));
 }
 
 interval interval::square() const
@@ -373,28 +424,28 @@ interval interval::square() const
     return interval(0.0, std::fmax(U(a,a), U(b,b)));
 }
 
-interval& interval::operator+=(interval const& other)
+interval& interval::operator+=(interval const other)
 {
     auto tmp = *this + other;
     std::swap(*this, tmp);
     return *this;
 }
 
-interval& interval::operator-=(interval const& other)
+interval& interval::operator-=(interval const other)
 {
     auto tmp = *this - other;
     std::swap(*this, tmp);
     return *this;
 }
 
-interval& interval::operator*=(interval const& other)
+interval& interval::operator*=(interval const other)
 {
     auto tmp = *this * other;
     std::swap(*this, tmp);
     return *this;
 }
 
-interval& interval::operator/=(interval const& other)
+interval& interval::operator/=(interval const other)
 {
     auto tmp = *this / other;
     std::swap(*this, tmp);

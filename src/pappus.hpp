@@ -1,6 +1,7 @@
 #ifndef PAPPUS_HPP
 #define PAPPUS_HPP
 
-#include "affine.hpp"
+#include "affine/affine.hpp"
+#include "interval/interval.hpp"
 
 #endif

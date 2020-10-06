@@ -1,8 +1,8 @@
-{pkgs, stdenv }:
+{ pkgs, stdenv }:
 
 stdenv.mkDerivation rec {
   pname = "crlibm";
-  version = "1.0.0beta5";
+  version = "1.0beta5";
 
   nativeBuildInputs = with pkgs; [ gcc10 autoreconfHook pkgconfig ];
 

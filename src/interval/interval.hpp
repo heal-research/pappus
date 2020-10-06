@@ -8,7 +8,9 @@
 #include <type_traits>
 #include <utility>
 
-#include "fputil.hpp"
+#include "fp/util.hpp"
+#include "util/contracts.hpp"
+#include "iterator.hpp"
 
 namespace pappus {
 
@@ -41,23 +43,23 @@ public:
     interval& operator=(const interval& other)
     {
         if (this != &other) {
-            lower_ = other.lower_;
-            upper_ = other.upper_;
+            inf_ = other.inf_;
+            sup_ = other.sup_;
         }
         return *this;
     }
 
-    double lower() const { return lower_; }
-    void set_lower(double value) { lower_ = value; }
+    double inf() const { return inf_; }
+    void set_lower(double value) { inf_ = value; }
 
-    double upper() const { return upper_; }
-    void set_upper(double value) { upper_ = value; }
+    double sup() const { return sup_; }
+    void set_upper(double value) { sup_ = value; }
 
     void set_bounds(double lower, double upper)
     {
         auto [lo, up] = check_bounds(lower, upper);
-        lower_ = lo;
-        upper_ = up;
+        inf_ = lo;
+        sup_ = up;
     };
 
     void set_bounds(std::pair<double, double> bounds)
@@ -67,91 +69,96 @@ public:
 
     std::pair<double, double> bounds() const
     {
-        return std::pair<double, double>(lower(), upper());
+        return std::pair<double, double>(inf(), sup());
     }
 
     double mid() const;
-
     double radius() const;
-
     double diameter() const;
+    double mig() const;
+    double mag() const;
 
     bool contains(double v) const
     {
-        return lower() <= v && v <= upper();
+        return inf() <= v && v <= sup();
     }
 
     bool contains_strict(double v) const
     {
-        return lower() < v && v < upper();
+        return inf() < v && v < sup();
     }
 
-    bool contains(interval const& other) const
+    bool contains(interval const other) const
     {
-        return lower() <= other.lower() && other.upper() <= upper();
+        return inf() <= other.inf() && other.sup() <= sup();
     }
 
-    bool contains_strict(interval const& other) const
+    bool contains_strict(interval const other) const
     {
-        return lower() < other.lower() && other.upper() < upper();
+        return inf() < other.inf() && other.sup() < sup();
     }
 
     // properties (loosely inspired from GAOL)
     bool is_finite() const
     {
-        return std::isfinite(lower()) && std::isfinite(upper());
+        return std::isfinite(inf()) && std::isfinite(sup());
     }
 
     bool is_infinite() const
     {
-        return std::isinf(lower()) && std::isinf(upper());
+        return std::isinf(inf()) && std::isinf(sup());
     }
 
     bool is_empty() const
     {
-        return !(lower() <= upper()); // negation to handle NaNs
+        return !(inf() <= sup()); // negation to handle NaNs
     }
 
     bool is_zero() const
     {
-        return lower() == 0 && upper() == 0;
+        return inf() == 0 && sup() == 0;
     }
 
     bool is_symmetric() const
     {
-        return !is_empty() && (-lower() == upper());
+        return !is_empty() && (-inf() == sup());
     }
 
     bool is_positive() const
     {
-        return is_empty() || (lower() >= 0.0);
+        return is_empty() || (inf() >= 0.0);
     }
 
     bool is_strictly_positive() const
     {
-        return is_empty() || (lower() > 0.0);
+        return is_empty() || (inf() > 0.0);
     }
 
     std::pair<interval, interval> split() const
     {
-        auto left = interval { lower(), mid() };
-        auto right = interval { std::nextafter(mid(), upper()), upper() };
+        auto left = interval { inf(), mid() };
+        auto right = interval { std::nextafter(mid(), sup()), sup() };
         return std::make_pair(left, right);
     }
 
+    subdivision split(size_t n) const
+    {
+        return subdivision(*this, n);
+    }
+
     // intersection
-    interval operator&(interval const& other) const
+    interval operator&(interval const other) const
     {
         if (is_empty() || other.is_empty())
             return interval::empty();
 
-        if (upper() < other.lower() || other.upper() < lower())
+        if (sup() < other.inf() || other.sup() < inf())
             return interval::empty();
 
-        return interval(std::fmax(lower(), other.lower()), std::fmin(upper(), other.upper()));
+        return interval(std::fmax(inf(), other.inf()), std::fmin(sup(), other.sup()));
     }
 
-    interval& operator&=(interval const& other)
+    interval& operator&=(interval const other)
     {
         auto tmp = *this & other;
         std::swap(*this, tmp);
@@ -159,7 +166,7 @@ public:
     }
 
     // technically this is the hull (not union) 
-    interval operator|(interval const& other) const
+    interval operator|(interval const other) const
     {
         if (is_empty()) 
             return other;
@@ -167,10 +174,10 @@ public:
         if (other.is_empty()) 
             return *this;
 
-        return interval(std::fmin(lower(), other.lower()), std::fmax(upper(), other.upper()));
+        return interval(std::fmin(inf(), other.inf()), std::fmax(sup(), other.sup()));
     }
 
-    interval& operator|=(interval const& other)
+    interval& operator|=(interval const other)
     {
         auto tmp = *this | other;
         std::swap(*this, tmp);
@@ -179,40 +186,40 @@ public:
 
     // this assumes set semantics where two intervals
     // are equal if they have the same bounds
-    bool operator==(interval const& other) const
+    bool operator==(interval const other) const
     {
         return (is_empty() && other.is_empty()) ||
-            (lower() == other.lower() && upper() == other.upper());
+            (inf() == other.inf() && sup() == other.sup());
     }
 
-    bool operator!=(interval const& other) const
+    bool operator!=(interval const other) const
     {
         return !(*this == other);
     }
 
-    bool operator<(interval const& other) const
+    bool operator<(interval const other) const
     {
         if (is_empty())
             return !other.is_empty();
 
-        return upper() < other.lower();
+        return sup() < other.inf();
     }
 
-    bool operator<=(interval const& other) const
+    bool operator<=(interval const other) const
     {
         if (is_empty())
             return true;
 
-        return upper() <= other.lower();
+        return sup() <= other.inf();
     }
 
     // arithmetic operators
-    interval operator+(interval const& other) const;
+    interval operator+(interval const other) const;
     interval operator+() const;
-    interval operator-(interval const& other) const;
+    interval operator-(interval const other) const;
     interval operator-() const;
-    interval operator*(interval const& other) const;
-    interval operator/(interval const& other) const;
+    interval operator*(interval const other) const;
+    interval operator/(interval const other) const;
     interval inv() const;
     interval exp() const;
     interval log() const;
@@ -223,12 +230,15 @@ public:
     interval acos() const;
     interval atan() const;
     interval square() const;
-    interval pow(interval const& other) const;
+    interval pow(interval const other) const;
+    interval sinh() const;
+    interval cosh() const;
+    interval tanh() const;
 
-    interval& operator+=(interval const& other);
-    interval& operator-=(interval const& other);
-    interval& operator*=(interval const& other);
-    interval& operator/=(interval const& other);
+    interval& operator+=(interval const other);
+    interval& operator-=(interval const other);
+    interval& operator*=(interval const other);
+    interval& operator/=(interval const other);
 
     interval operator+(double v) const;
     interval operator-(double v) const;
@@ -237,11 +247,11 @@ public:
     interval pow(double v) const;
 
     // friends
-    friend interval operator+(double v, interval const& i) { return i + v; }
-    friend interval operator-(double v, interval const& i) { return -i + v; }
-    friend interval operator*(double v, interval const& i) { return i * v; }
-    friend interval operator/(double v, interval const& i) { return i.inv() * v; }
-    friend interval pow(double v, interval const& i) { return interval(+0.0, -0.0); };
+    friend interval operator+(double v, interval const i) { return i + v; }
+    friend interval operator-(double v, interval const i) { return -i + v; }
+    friend interval operator*(double v, interval const i) { return i * v; }
+    friend interval operator/(double v, interval const i) { return i.inv() * v; }
+    friend interval pow(double v, interval const i) { return interval(+0.0, -0.0); };
 
     template <interval_class C>
     bool is() const
@@ -271,9 +281,9 @@ public:
     }
 
     // printing
-    friend std::ostream& operator<<(std::ostream& s, interval const& interval)
+    friend std::ostream& operator<<(std::ostream& s, interval const interval)
     {
-        s << "[" << interval.lower() << ", " << interval.upper() << "]";
+        s << "[" << interval.inf() << ", " << interval.sup() << "]";
         return s;
     }
 
@@ -288,27 +298,30 @@ public:
         return interval(a, b);
     }
 
+    interval segment(std::size_t i, std::size_t n) const;
+
 private:
-    double lower_;
-    double upper_;
+    double inf_;
+    double sup_;
 
     static std::pair<double, double> check_bounds(double lo, double hi)
     {
         // signed zero convention - see T. Hickey, Q. Ju, M. H. van Emden
         // Interval Arithmetic - From Principles to Implementation - Section 5.2
         // -0 used for right endpoints while +0 is used for left endpoints
+        EXPECT(!(lo > hi));
         if (lo == 0) lo = +0.0;
         if (hi == 0) hi = -0.0;
-        EXPECT(!(lo > hi));
         return std::pair<double, double>(lo, hi);
     }
 
     explicit interval(std::pair<double, double> interval)
-        : lower_(interval.first)
-        , upper_(interval.second)
+        : inf_(interval.first)
+        , sup_(interval.second)
     {
     }
 };
+
 
 } // namespace
 #endif

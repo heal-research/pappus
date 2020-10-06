@@ -1,6 +1,9 @@
-#include "interval.hpp"
+#include "interval/interval.hpp"
+#include "interval/iterator.hpp"
 #include <iomanip>
 #include <doctest/doctest.h>
+#include <functional>
+#include <random>
 
 namespace dt = doctest;
 namespace fp = pappus::fp;
@@ -18,6 +21,18 @@ TEST_CASE("interval")
 {
     CHECK_EQ(I(0, fp::pi).diameter(), fp::pi);
     CHECK_EQ(I::force_interval(3, 2), I(2, 3));
+
+    SUBCASE("subdivision_iterator")
+    {
+        I iv(0, 1);
+        auto subdiv = iv.split(5);
+        for (auto it = subdiv.begin(); it != subdiv.end(); ++it)
+            std::cout << *it << "\n";
+
+        for (auto vv : subdiv) {
+            std::cout << vv << "\n";
+        }
+    }
 }
 
 TEST_CASE("addition" * dt::test_suite("IA"))
@@ -122,6 +137,15 @@ TEST_CASE("division" * dt::test_suite("IA"))
     CHECK_EQ(I(2, 3) / I(4, 5), I("0.4", "0.75")); // P1/P1
     CHECK_EQ(1 / I(10, 10), I("0.1"));
     CHECK_EQ(1 / I(10, 10), I(10, 10).inv());
+
+    CHECK_EQ(I(-30, -15) / I(-5, -3), I(3, 10));
+    CHECK_EQ(I(0.9, 2.0) / I(0.1, 1.1), I(0.8181818181818181, 20));
+    CHECK_EQ(I(0.1, 1.1) / I(0.25, 4.0), I(0.025, 4.4));
+    CHECK_EQ(I(0.25, 4) / 4, I(0.0625, 1));
+    CHECK_EQ(I(0.25, 4) / Z, E);
+    CHECK_EQ(I(0, 1) / I(0, 1), I(0, fp::inf));
+    CHECK_EQ(I(-1, 1) / I(0, 1), F);
+    CHECK_EQ(I(-1, 1) / I(-1, 1), F);
 }
 
 TEST_CASE("inverse" * dt::test_suite("IA"))
@@ -233,3 +257,51 @@ TEST_CASE("trigonometric functions" * dt::test_suite("IA"))
     }
 }
 
+TEST_CASE("hyperbolic functions")
+{
+    SUBCASE("sinh")
+    {
+        CHECK_EQ(E.sinh(), E);
+        CHECK_EQ(I(0.5).sinh(), I(0.5210953054937473, 0.5210953054937474));
+        CHECK_EQ(I(0.5, 1.67).sinh(), I(0.5210953054937473, 2.5619603657712102));
+        CHECK_EQ(I(-4.5, 0.1).sinh(), I(-45.00301115199179, 0.10016675001984404));
+    }
+
+    SUBCASE("cosh")
+    {
+        CHECK_EQ(E.cosh(), E);
+        CHECK_EQ(I(0.5).cosh(), I(1.1276259652063807, 1.127625965206381));
+        CHECK_EQ(I(0.5, 1.67).cosh(), I(1.1276259652063807, 2.750207431409957));
+        CHECK_EQ(I(-4.5, 0.1).cosh(), I(1.0, 45.01412014853003));
+    }
+
+    SUBCASE("tanh")
+    {
+        // node: tanh is not supported by CRLibm so it is emulated as sinh/cosh
+        //       some small deviations may occurr
+        CHECK_EQ(E.tanh(), E);
+        CHECK_EQ(I(0.5).tanh(), I(0.46211715726000974, 0.4621171572600098));
+        CHECK_EQ(I(0.5, 1.67).tanh(), I(0.46211715726000974, 0.9315516846152083));
+        CHECK_EQ(I(-4.5, 0.1).tanh(), I(-0.9997532108480277, 0.09966799462495585));
+    }
+}
+
+TEST_CASE("test")
+{
+    I G(1, 2);
+    I c(1, 2);
+    I m1(1, 5);
+    I m2(1, 5);
+    I r(1, 2);
+    I Pwr(-32556.66005, -1.465855177);
+    I Pwr_noise(-32556.66005, -1.465855177);
+
+    auto y1 = (35.2701367598317 * c).exp() * (((2.88369395095527 * G).log() * 0.0967947806924084) / (((2.00922551855105 * m1) + 29.3374910937106) * I(4.97225176456532).tanh().log().sin()).cos()).exp() * ((2.00922551855105 * m1  + 29.3374910937106) * I(4.97225176456532).tanh().log().sin()).cos() * 53.5505423530015;
+    std::cout << "y1 = " << y1 << "\n";
+
+    auto y2 = G * (35.2701367598317 * c).exp() * (((2.88369395095527 * G).log() * 0.0967947806924084) / (((2.00922551855105 * m1) + 29.3374910937106) * I(4.97225176456532).tanh().log().sin()).cos()).exp() * ((((2.00922551855105 *m1) + 29.3374910937106) * I(4.97225176456532).tanh().log().sin()).cos()).square() * 10.3311355513865;
+    std::cout << "y2 = " << y2 << "\n";
+
+    auto y3 = y1 / y2;
+    std::cout << "y3 = " << y3 << "\n";
+}
