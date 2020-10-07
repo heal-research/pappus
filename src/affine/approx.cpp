@@ -492,7 +492,7 @@ affine_form affine_form::sqrt() const
     double a = min();
     double b = max();
 
-    if (a < limits::eps) {
+    if (a < 0) {
         throw std::runtime_error("sqrt: computing negative root.");
     }
 
@@ -508,9 +508,7 @@ affine_form affine_form::sqrt() const
     }
     double fb = std::sqrt(b);
 
-    double alpha;
-    double dzeta;
-    double delta;
+    double alpha, dzeta, delta;
 
     switch (context().approximation_mode()) {
     case approximation_mode::CHEBYSHEV: {
@@ -546,5 +544,61 @@ affine_form affine_form::sqrt() const
     dev.push_back(delta);
 
     return affine_form(context(), (center() + dNeg) * alpha + dzeta, dev, idx, idx.size());
+}
+
+affine_form affine_form::isqrt() const
+{
+    if (length() == 0) {
+        return affine_form(context(), 1 / std::sqrt(center()));
+    }
+
+    auto r = radius();
+    auto a = min();
+    auto b = max();
+
+    if (a < 0 || b < 0) {
+        throw std::runtime_error("isqrt: computing negative root.");
+    }
+
+    auto fa = 1.0 / std::sqrt(a);
+    auto fb = 1.0 / std::sqrt(b);
+
+    double alpha, dzeta, delta;
+
+    switch(context().approximation_mode()) {
+    case approximation_mode::CHEBYSHEV: {
+        alpha = radius() > limits::minrad
+            ? (fb - fa) / (b - a)
+            : -0.5 * fb * fb * fb;
+
+        auto x = std::pow(0.5 * (a / fb + b / fa), 2.0 / 3);
+        delta = 0.5 * (fa + alpha * (x - a) - 1 / std::sqrt(x));
+        dzeta = fa - alpha * a - delta;
+        break;
+    }
+    case approximation_mode::MINRANGE: {
+        alpha = -0.5 * fb * fb * fb;
+        delta = 0.5 * (fa - fb + alpha * (b - a));
+        dzeta = fa - alpha * a - delta;
+        break;
+    }
+    case approximation_mode::SECANT: {
+        alpha = radius() > limits::minrad
+            ? (fb - fa) / (b - a)
+            : -0.5 * fb * fb * fb;
+        dzeta = fa - alpha * a;
+        delta = 0.0;
+        break;
+    }
+    }
+
+    std::vector<size_t> idx = indices_;
+    std::vector<double> dev = deviations_;
+    view::as_array(dev) *= alpha;
+
+    idx.push_back(context().increment_last());
+    dev.push_back(delta);
+
+    return affine_form(context(), center() * alpha + dzeta, dev, idx, idx.size());
 }
 } // namespace

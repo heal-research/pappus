@@ -345,6 +345,20 @@ TEST_CASE("affine_form::sqrt()")
     CHECK_EQ(y1.to_interval(), y2.convert());
 }
 
+TEST_CASE("affine_form::isqrt()")
+{
+    pappus::interval u1(2, 7);
+    pappus::affine_context ctx;
+    af x1(ctx, u1);
+    auto y1 = x1.isqrt();
+
+    AAInterval u2(u1.inf(), u1.sup());
+    AAF x2(u2);
+    auto y2 = isqrt(x2);
+
+    CHECK_EQ(y1.to_interval(), y2.convert());
+}
+
 /******************************************************
  * Arbitrary expressions tests                        *
  *****************************************************/

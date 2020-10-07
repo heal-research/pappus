@@ -232,6 +232,7 @@ public:
     affine_form operator/(affine_form const&) const;
     affine_form pow(affine_form const&) const;
     affine_form sqrt() const;
+    affine_form isqrt() const;
 
     affine_form& operator+=(affine_form const&);
     affine_form& operator-=(affine_form const&);
