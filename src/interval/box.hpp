@@ -22,14 +22,11 @@ interval optimize_bounds(F&& f, box const& x, bool m = false, double w = 1e-5, s
     auto get_bound = [&](interval iv) { return m ? -iv.sup() : iv.inf(); };
 
     auto get_volume = [](auto&& box) {
-        return std::transform_reduce(
-                cbegin(box), cend(box), 1, std::multiplies{}, 
-                [](auto iv) { return iv.diameter(); }
-                );
+        return std::transform_reduce(cbegin(box), cend(box), -1, std::multiplies{}, [](auto iv) { return iv.diameter(); });
     };
 
     auto compare = [](auto&& a, auto&& b) {
-        return std::tie(std::get<1>(a), std::get<0>(a)) > std::tie(std::get<1>(b), std::get<0>(b));
+        return std::tie(std::get<0>(a), std::get<1>(a)) > std::tie(std::get<0>(b), std::get<1>(b));
     };
 
     // a priority queue to keep track of the bounds
