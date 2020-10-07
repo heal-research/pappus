@@ -331,6 +331,20 @@ TEST_CASE("affine_form::pow(double, af)")
     check_exp(2, ai(2, 3));
 }
 
+TEST_CASE("affine_form::sqrt()")
+{
+    pappus::interval u1(1, 4);
+    pappus::affine_context ctx;
+    af x1(ctx, u1);
+    auto y1 = x1.sqrt();
+
+    AAInterval u2(u1.inf(), u1.sup());
+    AAF x2(u2);
+    auto y2 = sqrt(x2);
+
+    CHECK_EQ(y1.to_interval(), y2.convert());
+}
+
 /******************************************************
  * Arbitrary expressions tests                        *
  *****************************************************/

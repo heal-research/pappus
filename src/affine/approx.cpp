@@ -1,4 +1,5 @@
 #include "affine.hpp"
+#include "affine/context.hpp"
 
 namespace pappus {
 // non-affine operations approximate the original function
@@ -269,7 +270,6 @@ affine_form affine_form::pow(int exponent) const
     idx[length_] = context().increment_last();
     dev[length_] = delta;
 
-
     auto result = affine_form(context(), alpha * c + dzeta, dev, idx, idx.size());
     return result;
 }
@@ -283,7 +283,7 @@ affine_form affine_form::pow(double exponent) const
         return affine_form(context(), 1.0);
 
     auto alpha = 0.0;
-    auto beeta = 0.0;
+    auto beta = 0.0;
     auto gamma = 0.0;
 
     auto fMin = std::pow(min(), exponent);
@@ -292,28 +292,28 @@ affine_form affine_form::pow(double exponent) const
     bool exponent_in_01 = interval(0, 1).contains(exponent);
 
     if (context().approximation_mode() == approximation_mode::CHEBYSHEV) {
-        beeta = (fMax - fMin) / (2 * radius());
-        auto x2 = std::pow(beeta / exponent, 1 / (exponent - 1));
-        alpha = 0.5 * (-beeta * (min() + x2) + fMin + std::pow(x2, exponent));
-        gamma = 0.5 * (beeta * (x2 - min()) + fMin - std::pow(x2, exponent));
+        beta = (fMax - fMin) / (2 * radius());
+        auto x2 = std::pow(beta / exponent, 1 / (exponent - 1));
+        alpha = 0.5 * (-beta * (min() + x2) + fMin + std::pow(x2, exponent));
+        gamma = 0.5 * (beta * (x2 - min()) + fMin - std::pow(x2, exponent));
         if (exponent_in_01)
             gamma = -gamma;
     } else if (context().approximation_mode() == approximation_mode::MINRANGE) {
-        beeta = exponent * std::pow(exponent_in_01 ? max() : min(), exponent - 1);
-        alpha = 0.5 * (-beeta * 2 * center() + fMin + fMax);
-        gamma = 0.5 * (-beeta * 2 * radius() - fMin + fMax);
+        beta = exponent * std::pow(exponent_in_01 ? max() : min(), exponent - 1);
+        alpha = 0.5 * (-beta * 2 * center() + fMin + fMax);
+        gamma = 0.5 * (-beta * 2 * radius() - fMin + fMax);
     }
 
     auto idx = indices_;
     auto dev = deviations_;
-    view::as_array(dev) *= beeta;
+    view::as_array(dev) *= beta;
 
     if (gamma != 0) {
         idx.push_back(context().increment_last());
         dev.push_back(gamma);
     }
 
-    return affine_form(context(), beeta * center() + alpha, std::move(dev), std::move(idx), idx.size());
+    return affine_form(context(), beta * center() + alpha, std::move(dev), std::move(idx), idx.size());
 }
 
 affine_form affine_form::pow(affine_form const& other) const
@@ -331,7 +331,7 @@ affine_form affine_form::pow(affine_form const& other) const
 
     if (other.length() == 0)
         return this->pow(other.center());
-        //return pow(*this, other.center());
+    //return pow(*this, other.center());
 
     // evaluate the edge of the polygon defined by the base and the exponent
     std::vector<size_t> idx;
@@ -379,7 +379,7 @@ affine_form affine_form::pow(affine_form const& other) const
         for (j = 0; j < idx.size(); ++j) {
             // the conditionals are necessary because we want +0.0 (not -0.0)
             auto phi = std::atan2(dev_e[j] == 0 ? 0 : -2 * eps[j] * dev_e[j],
-                                  dev_b[j] == 0 ? 0 : -2 * eps[j] * dev_b[j]);
+                dev_b[j] == 0 ? 0 : -2 * eps[j] * dev_b[j]);
             phi -= phi0;
 
             if (phi_max < phi && interval(0, M_PI).contains(phi)) {
@@ -442,7 +442,8 @@ affine_form affine_form::pow(affine_form const& other) const
     return affine_form(context(), std::pow(center(), other.center()) + alpha, std::move(dev), std::move(idx), idx.size());
 }
 
-affine_form affine_form::pow(double base, affine_form const& exponent) {
+affine_form affine_form::pow(double base, affine_form const& exponent)
+{
     if (base == 1) {
         std::vector<size_t> idx = exponent.indices_;
         std::vector<double> dev = exponent.deviations_;
@@ -456,29 +457,94 @@ affine_form affine_form::pow(double base, affine_form const& exponent) {
     }
 
     auto alpha = 0.0;
-    auto beeta = 0.0;
+    auto beta = 0.0;
     auto gamma = 0.0;
 
     auto fMin = std::pow(base, exponent.min());
     auto fMax = std::pow(base, exponent.max());
 
     if (exponent.context().approximation_mode() == approximation_mode::MINRANGE) {
-        beeta = fMin * std::log(base);
-        alpha = -beeta * 2 * exponent.center() + fMin + fMax;
-        gamma = -beeta * 2 * exponent.radius() - fMin + fMax;
+        beta = fMin * std::log(base);
+        alpha = -beta * 2 * exponent.center() + fMin + fMax;
+        gamma = -beta * 2 * exponent.radius() - fMin + fMax;
     } else { // CHEBYSHEV
         auto b = std::log(base);
-        beeta = (fMax - fMin) / (exponent.max() - exponent.min());
-        auto x2 = std::log(beeta / b) / b;
-        alpha = 0.5 * (-beeta * (exponent.min() + x2) + fMin + std::pow(base, x2));
-        gamma = 0.5 * (-beeta * (exponent.min() - x2) + fMin - std::pow(base, x2));
+        beta = (fMax - fMin) / (exponent.max() - exponent.min());
+        auto x2 = std::log(beta / b) / b;
+        alpha = 0.5 * (-beta * (exponent.min() + x2) + fMin + std::pow(base, x2));
+        gamma = 0.5 * (-beta * (exponent.min() - x2) + fMin - std::pow(base, x2));
     }
 
     std::vector<size_t> idx = exponent.indices_;
     std::vector<double> dev = exponent.deviations_;
-    view::as_array(dev) *= beeta;
+    view::as_array(dev) *= beta;
     idx.push_back(exponent.context().increment_last());
     dev.push_back(gamma);
-    return affine_form(exponent.context(), beeta * exponent.center() + alpha, std::move(dev), std::move(idx), idx.size());
+    return affine_form(exponent.context(), beta * exponent.center() + alpha, std::move(dev), std::move(idx), idx.size());
+}
+
+affine_form affine_form::sqrt() const
+{
+    if (length() == 0) {
+        return affine_form(context(), std::sqrt(center()));
+    }
+
+    double a = min();
+    double b = max();
+
+    if (a < limits::eps) {
+        throw std::runtime_error("sqrt: computing negative root.");
+    }
+
+    double dNeg = 0.0;
+    double fa;
+
+    if (a < 0.0) {
+        dNeg = -min() / 2;
+        a = 0.0;
+        fa = 0.0;
+    } else {
+        fa = std::sqrt(a);
+    }
+    double fb = std::sqrt(b);
+
+    double alpha;
+    double dzeta;
+    double delta;
+
+    switch (context().approximation_mode()) {
+    case approximation_mode::CHEBYSHEV: {
+        alpha = 1.0 / (fa + fb);
+        auto t =  0.25 * fa * fb * alpha;
+        auto u = 0.125 * (a + b) * alpha;
+        dzeta = u + 3.0 * t;
+        delta = u - t; // error
+        break;
+    }
+    case approximation_mode::MINRANGE: {
+        alpha = 1.0 / (2.0 * fb);
+        delta = 0.5 * alpha * (a - 2 * fa * fb + b);
+        dzeta = 0.5 * fb - delta;
+        break;
+    }
+    case approximation_mode::SECANT: {
+        alpha = radius() > limits::minrad
+            ? (fb - fa) / (b - a)
+            : 1.0 / (2.0 * fb);
+        dzeta = fa - alpha * a;
+        delta = 0.0;
+        break;
+    }
+    }
+
+    alpha -= dNeg / radius();
+    std::vector<size_t> idx = indices_;
+    std::vector<double> dev = deviations_;
+    view::as_array(dev) *= alpha;
+
+    idx.push_back(context().increment_last());
+    dev.push_back(delta);
+
+    return affine_form(context(), (center() + dNeg) * alpha + dzeta, dev, idx, idx.size());
 }
 } // namespace
