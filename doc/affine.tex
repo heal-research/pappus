@@ -1,4 +1,4 @@
-\documentclass[fontsize=12pt,a4paper]{scrartcl} % document type and language
+\documentclass[fontsize=11pt,a4paper]{scrartcl} % document type and language
 
 \usepackage[utf8]{inputenc}
 \usepackage{microtype}
@@ -17,7 +17,7 @@
 \setlength{\parskip}{0.5em}
 \renewcommand{\baselinestretch}{1.05}
 
-\title{Affine Arithmetic}
+\title{Interval and Affine Arithmetic}
 
 \author{Bogdan Burlacu}
 
@@ -28,7 +28,80 @@
 
 \maketitle
 
-\section{Introduction}
+\section{Interval Arithmetic}
+
+\subsection{Preliminaries}
+
+In interval arithmetic (IA), a \emph{closed} interval $[a,b]$ is given by the set of real numbers:
+
+\begin{align}
+    [a,b] = \{ x \in \mathbb{R}: a \leq x \leq b \}
+\end{align}
+
+Capital letters are commonly used to denote intervals:
+\begin{align}
+    X = [ \underline{X}, \overline{X} ]
+\end{align}
+
+where $\underline{X}$ and $\overline{X}$ are the \emph{infimum} and \emph{supremum}, respectively. 
+
+All elementary operations are well-defined for IA and produce bounds that are guaranteed to enclose the actual function bounds.
+
+For a real valued monovariate function $f$, the range of values $f(x)$ for $x \in X$ (where $X$ is an interval) is called the \emph{image set} of $f$:
+\begin{align}
+    f(X) &= \{ f(x) : x \in X \}\label{eq:univariate-image}\\
+         &\text{In the multivariate case, this becomes}:\nonumber \\
+    f(X_1, ..., X_n) &= \{ f(x_1, ..., x_n) : x_1 \in X_1, ..., x_n \in X_n \}\label{eq:multivariate-image}
+\end{align}
+
+\subsubsection{United extension}
+
+We use the term \emph{united extension} to describe the set images denoted in \Cref{eq:univariate-image,eq:multivariate-image}. 
+
+More formally, let $g : M_1 \to M_2$ be a mapping between sets $M_1$ and $M_2$, and $S(M_1)$ and $S(M_2)$  the families of subsets of $M_1$ and $M_2$, respectively. The \emph{united extension} of $g$ is the set-value mapping $\bar{g} : S(M_1) \to S(M_2)$ such that:
+\begin{align}
+    \bar{g}(X) = \{ g(x) : x \in X, X \in S(M_1) \}\label{eq:united-extension}
+\end{align}
+
+Note that $\bar{g}(X)$ contains precisely the same elements as the set image of $g(X)$:
+\begin{align}
+    \bar{g}(X) = \cup_{x \in X} \{ g(x) \}
+\end{align}
+
+\subsection{Interval Extensions}
+
+Let $F(X)$ be the corresponding interval-valued function for $f(x)$. We say that $F$ is an \emph{interval extension} of $f$ if for degenerate interval arguments $F$ agrees with $f$:
+\begin{align}
+    F([x,x]) = f(x)
+\end{align}
+
+The interval extension maintains the same meaning and properties for multivariate functions.
+
+\subsubsection{Fundamental Theorem of Interval Analysis}
+
+From \Cref{eq:united-extension} it results that $\bar{g}(X)$ has the following property, called the \emph{subset property}:
+\begin{align}
+    X, Y \in S(M_1) \text{ with } X \subseteq Y \implies \bar{g}(X) \subseteq \bar{g}(Y)\label{eq:subset-property}
+\end{align}
+
+We say that $F = F(X_1, ...,  X_n)$ is an \emph{inclusion isotonic} if
+\begin{align}
+    Y_i \subseteq X_i \text{ for } i=1,...,n \implies F(Y_1,...,Y_n) \subseteq F(X_1,...,X_n) 
+\end{align}
+
+Then we note that united extensions, which all have the subset property, are inclusion isotonic. The set of operations of IA must sastisfy:
+\begin{align}
+    Y_1 \subseteq X_1, Y_2 \subseteq X_2 \implies Y_1 \odot Y_2 \subseteq X_1 \odot X_2
+\end{align}
+
+We can now state the \emph{fundamental theorem}:
+
+If $F$ is an inclusion isotonic interval extension of $f$, then
+\begin{align}
+    f(X_1, ..., X_n) \subseteq F(X_1, ..., X_n)
+\end{align}
+
+\section{Affine Arithmetic}
 
 In affine arithmetic, a quantity $x$ is represented as the following affine form:
 
