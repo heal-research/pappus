@@ -286,22 +286,34 @@ TEST_CASE("hyperbolic functions")
     }
 }
 
-TEST_CASE("test")
+TEST_CASE("power functions")
 {
-    I G(1, 2);
-    I c(1, 2);
-    I m1(1, 5);
-    I m2(1, 5);
-    I r(1, 2);
-    I Pwr(-32556.66005, -1.465855177);
-    I Pwr_noise(-32556.66005, -1.465855177);
+    SUBCASE("integer power")
+    {
+        CHECK_EQ(I(0, 3).pow(2), I(0, 9));
+        CHECK_EQ(I(2, 3).pow(2), I(4, 9));
+        CHECK_EQ(I(-3, 0).pow(2), I(0, 9));
+        CHECK_EQ(I(-3, -2).pow(2), I(4, 9));
+        CHECK_EQ(I(-3, 2).pow(2), I(0, 9));
 
-    auto y1 = (35.2701367598317 * c).exp() * (((2.88369395095527 * G).log() * 0.0967947806924084) / (((2.00922551855105 * m1) + 29.3374910937106) * I(4.97225176456532).tanh().log().sin()).cos()).exp() * ((2.00922551855105 * m1  + 29.3374910937106) * I(4.97225176456532).tanh().log().sin()).cos() * 53.5505423530015;
-    std::cout << "y1 = " << y1 << "\n";
+        CHECK_EQ(I(0, 3).pow(2), I(0, 3).square());
+        CHECK_EQ(I(2, 3).pow(2), I(2, 3).square());
+        CHECK_EQ(I(-3, 0).pow(2), I(-3, 0).square());
+        CHECK_EQ(I(-3, -2).pow(2), I(-3, -2).square());
+        CHECK_EQ(I(-3, 2).pow(2), I(-3, 2).square());
 
-    auto y2 = G * (35.2701367598317 * c).exp() * (((2.88369395095527 * G).log() * 0.0967947806924084) / (((2.00922551855105 * m1) + 29.3374910937106) * I(4.97225176456532).tanh().log().sin()).cos()).exp() * ((((2.00922551855105 *m1) + 29.3374910937106) * I(4.97225176456532).tanh().log().sin()).cos()).square() * 10.3311355513865;
-    std::cout << "y2 = " << y2 << "\n";
+        CHECK_EQ(I(0, 3).pow(3), I(0, 27));
+        CHECK_EQ(I(2, 3).pow(3), I(8, 27));
+        CHECK_EQ(I(-3, 0).pow(3), I(-27, 0));
+        CHECK_EQ(I(-3, -2).pow(3), I(-27, -8));
+        CHECK_EQ(I(-3, 2).pow(3), I(-27, 8));
 
-    auto y3 = y1 / y2;
-    std::cout << "y3 = " << y3 << "\n";
+        CHECK_EQ(I(0, 3).pow(-2), I(1/9., fp::inf));
+        CHECK_EQ(I(-3, 0).pow(-2), I(1/9., fp::inf));
+        CHECK_EQ(I(-3, 2).pow(-2), I(1/9., fp::inf));
+        CHECK_EQ(I(2, 3).pow(-2), I(1/9., 1./4));
+        CHECK_EQ(I(1, 2).pow(-3), I(1/8., 1.));
+        CHECK_EQ(I(0, 3).pow(-3), I(1/27., fp::inf));
+        CHECK_EQ(I(-1, 2).pow(-3), F);
+    }
 }

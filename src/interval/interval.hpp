@@ -22,9 +22,11 @@ public:
         : interval(0, 0)
     {
     }
+
     explicit interval(double v) : interval(v, v)
     {
     }
+
     explicit interval(double l, double h)
         : interval(check_bounds(l, h))
     {
@@ -231,20 +233,21 @@ public:
     interval atan() const;
     interval square() const;
     interval pow(interval const other) const;
+    interval pow(int) const;
+    interval pow(double) const;
     interval sinh() const;
     interval cosh() const;
     interval tanh() const;
 
-    interval& operator+=(interval const other);
-    interval& operator-=(interval const other);
-    interval& operator*=(interval const other);
-    interval& operator/=(interval const other);
+    interval& operator+=(interval const);
+    interval& operator-=(interval const);
+    interval& operator*=(interval const);
+    interval& operator/=(interval const);
 
-    interval operator+(double v) const;
-    interval operator-(double v) const;
-    interval operator*(double v) const;
-    interval operator/(double v) const;
-    interval pow(double v) const;
+    interval operator+(double) const;
+    interval operator-(double) const;
+    interval operator*(double) const;
+    interval operator/(double) const;
 
     // friends
     friend interval operator+(double v, interval const i) { return i + v; }

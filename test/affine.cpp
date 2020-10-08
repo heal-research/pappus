@@ -25,11 +25,14 @@ bool operator==(AAInterval const& lhs, ai const& rhs)
 
 bool operator==(af const& lhs, AAF const& rhs)
 {
-    if (lhs.length() > rhs.getlength()) 
+    if (lhs.length() > rhs.getlength()) {
         return false;
+    }
+
     for (size_t i = 0; i < lhs.length(); ++i) {
-        if (lhs[i] != rhs[i])
+        if (lhs[i] != rhs[i]) {
             return false;
+        }
     }
     return true;
 }

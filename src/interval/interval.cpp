@@ -42,7 +42,8 @@ double interval::diameter() const
     return ropu<op_sub>(sup(), inf());
 }
 
-double interval::mig() const {
+double interval::mig() const
+{
     if (is_empty())
         return fp::nan;
 
@@ -52,7 +53,8 @@ double interval::mig() const {
     return std::min(ropd<op_abs>(inf()), ropd<op_abs>(sup()));
 }
 
-double interval::mag() const {
+double interval::mag() const
+{
     if (is_empty())
         return fp::nan;
 
@@ -62,11 +64,11 @@ double interval::mag() const {
 // divide this interval into n segments and return the ith segment
 interval interval::segment(std::size_t i, std::size_t n) const
 {
-        EXPECT(i < n);
-        auto h = diameter() / n;
-        auto a = ropd<op_add>(inf(), i * h);
-        auto b = ropu<op_add>(inf(), (i+1) * h);
-        return interval(a, b);
+    EXPECT(i < n);
+    auto h = diameter() / n;
+    auto a = ropd<op_add>(inf(), i * h);
+    auto b = ropu<op_add>(inf(), (i + 1) * h);
+    return interval(a, b);
 }
 
 interval interval::operator+() const
@@ -283,14 +285,14 @@ interval interval::sin() const
         if (x == 3 && y == 0)
             return interval(D(a), U(b));
 
-       if (x == 1 && y == 2)
+        if (x == 1 && y == 2)
             return interval(D(b), U(a));
 
-       if ((x == 0 || x == 3) && (y == 1 || y == 2))
-           return interval(std::fmin(D(a), D(b)), 1.0);
+        if ((x == 0 || x == 3) && (y == 1 || y == 2))
+            return interval(std::fmin(D(a), D(b)), 1.0);
 
-       if ((x ==1 || x == 2) && (y == 0 || y == 3))
-           return interval(-1.0, std::fmax(U(a), U(b)));
+        if ((x == 1 || x == 2) && (y == 0 || y == 3))
+            return interval(-1.0, std::fmax(U(a), U(b)));
     }
 
     return interval(-1, 1);
@@ -343,7 +345,7 @@ interval interval::tan() const
         return *this;
 
     if (diameter() > pi)
-        return interval::infinite(); 
+        return interval::infinite();
 
     auto [a, b] = bounds();
     auto x = trig::get_quadrant(a);
@@ -416,12 +418,73 @@ interval interval::square() const
     const auto U = [](auto x, auto y) { return ropu<op_mul>(x, y); };
 
     if (0 <= a)
-        return interval(D(a,a), U(b,b));
+        return interval(D(a, a), U(b, b));
 
     if (b <= 0)
-        return interval(D(b,b), U(a,a));
+        return interval(D(b, b), U(a, a));
 
-    return interval(0.0, std::fmax(U(a,a), U(b,b)));
+    return interval(0.0, std::fmax(U(a, a), U(b, b)));
+}
+
+interval interval::pow(int p) const
+{
+    if (is_empty())
+        return interval::empty();
+
+    if (p == 0)
+        return interval(1.0);
+
+    if (p == 1)
+        return *this;
+
+    if (p < 0 && is_zero())
+        return interval::empty();
+
+    auto [a, b] = bounds();
+
+    if (p % 2 == 0) { // even power
+        if (p > 0) {
+            if (a >= 0)
+                return interval(ropd<op_pow>(a, p), ropu<op_pow>(b, p));
+
+            if (b <= 0)
+                return interval(ropd<op_pow>(b, p), ropu<op_pow>(a, p));
+
+            return interval(ropd<op_pow>(mig(), p), ropu<op_pow>(mag(), p));
+        } else {
+            if (a >= 0)
+                return interval(ropd<op_pow>(b, p), ropu<op_pow>(a, p));
+
+            if (b <= 0)
+                return interval(ropd<op_pow>(a, p), ropu<op_pow>(b, p));
+
+            return interval(ropd<op_pow>(mag(), p), ropu<op_pow>(mig(), p));
+        }
+    } else { // odd power
+        if (is_infinite())
+            return interval::infinite();
+
+        if (p > 0) {
+            if (a == 0)
+                return interval(0, ropu<op_pow>(b, p));
+
+            if (b == 0)
+                return interval(ropd<op_pow>(a, p), 0);
+
+            return interval(ropd<op_pow>(a, p), ropu<op_pow>(b, p));
+        } else {
+            if (a == 0)
+                return interval(ropd<op_pow>(b, p), fp::inf);
+
+            if (b == 0)
+                return interval(-fp::inf, ropu<op_pow>(a, p));
+
+            if (contains(0.0))
+                return interval::infinite();
+
+            return interval(ropd<op_pow>(b, p), ropu<op_pow>(a, p));
+        }
+    }
 }
 
 interval& interval::operator+=(interval const other)
