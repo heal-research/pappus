@@ -15,7 +15,7 @@ bool operator==(ai const& lhs, AAInterval const& rhs)
 {
     auto l = std::fabs(lhs.inf() - rhs.getlo());
     auto u = std::fabs(lhs.sup() - rhs.gethi());
-    return l < eps && u < eps; 
+    return l < eps && u < eps;
 }
 
 bool operator==(AAInterval const& lhs, ai const& rhs)
@@ -308,8 +308,11 @@ TEST_CASE("affine_form::pow(af)")
         AAF x2 = AAF(AAInterval(base.inf(), base.sup()));
         AAF e2 = AAF(AAInterval(exponent.inf(), exponent.sup()));
         AAF y2 = x2 ^ e2;
-        CHECK(y1.to_interval() == y2.convert());
-        CHECK(y1 == y2);
+
+        auto w1 = y1.to_interval();
+        auto w2 = y2.convert();
+        CHECK(doctest::Approx(w1.inf()) == w2.getlo());
+        CHECK(doctest::Approx(w1.sup()) == w2.gethi());
     };
 
     SUBCASE("[1, 4] ^ [0, 0.5]") { check_exp(ai(1.0, 4.0), ai(0.0, 0.5)); }
@@ -391,19 +394,25 @@ TEST_CASE("X^2 + X")
         pappus::affine_context ctx;
         ai u1(-1, 1);
         af x1(ctx, u1);
-        std::cout << "x1:\n" << x1 << "\n";
+        std::cout << "x1:\n"
+                  << x1 << "\n";
         std::cout << "x1 interval: " << x1.to_interval() << "\n";
         auto z1 = (x1 + 0.5).pow(2.0) - 0.25;
-        std::cout << "z1:\n" << z1 << "\n";
+        std::cout << "z1:\n"
+                  << z1 << "\n";
         std::cout << "z1 interval: " << z1.to_interval() << "\n";
 
         AAInterval u2(u1.inf(), u1.sup());
         AAF x2(u2);
         AAF z2 = ((x2 + 0.5) ^ 2) - 0.25;
-        std::cout << "x2:\n" << x2;
-        std::cout << "x2 interval:\n" << x2.convert() << "\n";
+        std::cout << "x2:\n"
+                  << x2;
+        std::cout << "x2 interval:\n"
+                  << x2.convert() << "\n";
 
-        std::cout << "z2:\n" << z2;
-        std::cout << "z2 interval:\n" << z2.convert() << "\n";
+        std::cout << "z2:\n"
+                  << z2;
+        std::cout << "z2 interval:\n"
+                  << z2.convert() << "\n";
     }
 }

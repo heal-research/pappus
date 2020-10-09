@@ -30,6 +30,7 @@ namespace fp {
     struct op_sinh { double operator()(double a) { return std::sinh(a); } };
     struct op_cosh { double operator()(double a) { return std::cosh(a); } };
     struct op_tanh { double operator()(double a) { return std::tanh(a); } };
+    struct op_sqrt { double operator()(double a) { return std::sqrt(a); } };
 
     template<int ROUND_MODE, typename OP, typename... Args>
     double rop(Args&& ...args)
@@ -67,7 +68,8 @@ namespace fp {
     template<> double ropd<op_sinh>(double a) { return sinh_rd(a); }
     template<> double ropd<op_cosh>(double a) { return cosh_rd(a); }
     template<> double ropd<op_tanh>(double a) { return sinh_rd(a) / cosh_rd(a); }
-    template<> double ropd<op_abs>(double a) { return std::abs(a); }
+    template<> double ropd<op_sqrt>(double a) { return rop<FE_DOWNWARD, op_sqrt>(a); }
+    template<> double ropd<op_abs>(double a) { return rop<FE_DOWNWARD, op_abs>(a); }
 
     template<typename OP = op_add>
     double ropu(double a, double b) { return rop<FE_UPWARD, OP>(a, b); }
@@ -88,7 +90,8 @@ namespace fp {
     template<> double ropu<op_sinh>(double a) { return sinh_ru(a); }
     template<> double ropu<op_cosh>(double a) { return cosh_ru(a); }
     template<> double ropu<op_tanh>(double a) { return sinh_ru(a) / cosh_rd(a); }
-    template<> double ropu<op_abs>(double a) { return std::abs(a); }
+    template<> double ropu<op_sqrt>(double a) { return rop<FE_UPWARD, op_sqrt>(a); }
+    template<> double ropu<op_abs>(double a) { return rop<FE_UPWARD, op_abs>(a); }
 #else    
     template<typename OP, typename... Args>
     constexpr auto ropd = [](auto&& ...args) { return rop<FE_DOWNWARD, OP, Args...>(args...); };

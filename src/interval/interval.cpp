@@ -250,11 +250,13 @@ interval interval::exp() const
 interval interval::log() const
 {
     // cannot take log of a negative interval
-    if (sup() < 0)
-        return interval::empty();
+    auto x = *this & interval(0, fp::inf);
 
-    auto i = interval(std::fmax(0.0, inf()), sup());
-    return interval(ropd<op_log>(inf()), ropu<op_log>(sup()));
+    if (x.is_empty() || x.sup() <= 0) {
+        return interval::empty();
+    }
+
+    return interval(ropd<op_log>(x.inf()), ropu<op_log>(x.sup()));
 }
 
 interval interval::sin() const
@@ -432,7 +434,9 @@ interval interval::pow(int p) const
         return interval::empty();
 
     if (p == 0)
-        return interval(1.0);
+        return is_zero() 
+            ? interval::empty()
+            : interval(1.0);
 
     if (p == 1)
         return *this;
@@ -485,6 +489,50 @@ interval interval::pow(int p) const
             return interval(ropd<op_pow>(b, p), ropu<op_pow>(a, p));
         }
     }
+}
+
+//TODO: improve this pow implementation
+interval interval::pow(double p) const
+{
+    if (is_empty()) {
+        return interval::empty();
+    }
+
+    if (std::fmod(p, 1.0) == 0) {
+        return this->pow(int(p));
+    }
+
+    if (is_zero()) {
+        return p > 0 ? interval::zero() : interval::empty();
+    }
+
+    if (p == 0.5) {
+        return this->sqrt();
+    }
+
+    return (p * this->log()).exp();
+}
+
+interval interval::pow(interval const other) const
+{
+    auto x = (*this) & interval(0, fp::inf);
+
+    if (x.is_empty() || other.is_empty()) {
+        return interval::empty();
+    }
+
+    return x.pow(other.inf()) | x.pow(other.sup());
+}
+
+interval interval::sqrt() const
+{
+    auto x = *this & interval(0, fp::inf);
+
+    if (x.is_empty()) {
+        return interval::empty();
+    }
+
+    return interval(ropd<op_sqrt>(x.inf()), ropu<op_sqrt>(x.sup()));
 }
 
 interval& interval::operator+=(interval const other)

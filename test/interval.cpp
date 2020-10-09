@@ -257,7 +257,7 @@ TEST_CASE("trigonometric functions" * dt::test_suite("IA"))
     }
 }
 
-TEST_CASE("hyperbolic functions")
+TEST_CASE("hyperbolic functions" * dt::test_suite("IA"))
 {
     SUBCASE("sinh")
     {
@@ -286,7 +286,35 @@ TEST_CASE("hyperbolic functions")
     }
 }
 
-TEST_CASE("power functions")
+TEST_CASE("trancendental functions" * dt::test_suite("IA"))
+{
+    SUBCASE("exp")
+    {
+        CHECK_EQ(E.exp(), E);
+        CHECK_EQ(Z.exp(), I(1));
+
+        CHECK_EQ(I(1/2.).exp(), I(1.648721270700128, 1.6487212707001282));
+        CHECK_EQ(I(0.1).exp(), I(1.1051709180756475e+00, 1.1051709180756477e+00));
+        CHECK_EQ(I(1).exp(), I(2.718281828459045, 2.7182818284590455));
+        CHECK_EQ(I(999).exp(), I(max, fp::inf));
+        CHECK_EQ(I(-999).exp(), I(0, 4.94066e-324)); 
+        CHECK_EQ(I(-10, -5).exp(), I(4.539992976248485e-5, 0.006737946999085468));
+        CHECK_EQ(I(-5, 9).exp(), I(0.006737946999085467, 8103.083927575384));
+        CHECK_EQ(I(9.0,11.0).exp(), I(8103.083927575383, 59874.141715197824));
+        CHECK_EQ(I(-3.5).exp(), I(0.030197383422318497, 0.0301973834223185));
+        CHECK_EQ(I(3.5).exp(), I(33.11545195869231, 33.11545195869232));
+    }
+
+    SUBCASE("log")
+    {
+        CHECK_EQ(E.log(), E);
+        CHECK_EQ(I(1/2.).log(), I(-6.931471805599454e-01, -6.9314718055994529e-01));
+        CHECK_EQ(I(0.1).log(), I(-2.3025850929940459e+00, -2.3025850929940455e+00));
+        CHECK_EQ(I(-4, 0).log(), E); 
+    }
+}
+
+TEST_CASE("power functions" * dt::test_suite("IA"))
 {
     SUBCASE("integer power")
     {
@@ -315,5 +343,19 @@ TEST_CASE("power functions")
         CHECK_EQ(I(1, 2).pow(-3), I(1/8., 1.));
         CHECK_EQ(I(0, 3).pow(-3), I(1/27., fp::inf));
         CHECK_EQ(I(-1, 2).pow(-3), F);
+
+        CHECK_EQ(E.pow(0), E);
+    }
+
+    SUBCASE("double power")
+    {
+        CHECK_EQ(Z.pow(1.1), Z);
+        CHECK_EQ(Z.pow(0.0), E);
+        CHECK_EQ(Z.pow(1/10.), Z);
+        CHECK_EQ(Z.pow(-1/10.), E);
+        CHECK_EQ(E.pow(0.0), E);
+        CHECK_EQ(I(2.5).pow(3), I(15.625));
+        CHECK_EQ(I(-3,4).pow(0.5), I(0, 2));
+        CHECK_EQ(I(-3,4).pow(0.5), I(-3,4).pow(1/2.));
     }
 }

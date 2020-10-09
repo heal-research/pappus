@@ -235,6 +235,7 @@ public:
     interval pow(interval const other) const;
     interval pow(int) const;
     interval pow(double) const;
+    interval sqrt() const;
     interval sinh() const;
     interval cosh() const;
     interval tanh() const;
