@@ -148,7 +148,10 @@ T ropd(T first, Args... rest)
     else if constexpr (std::is_same_v<OP, op_tanh>)  return detail::outward_lo_keep_zero(eve::tanh(first));
     else if constexpr (std::is_same_v<OP, op_cbrt>)  return detail::outward_lo(eve::cbrt(first));
     else if constexpr (std::is_same_v<OP, op_log1p>) return detail::outward_lo_keep_zero(eve::log1p(first));
-    // floor/ceil are exact operations — no rounding adjustment needed.
+    // floor/ceil are exact operations — they produce exact integers, so
+    // directed rounding is a no-op. Both ropd and ropu resolve to the same
+    // plain eve::floor/eve::ceil. Soundness comes from mathematical exactness,
+    // not from rounding mode. The ropd/ropu wrapper is kept for API uniformity.
     else if constexpr (std::is_same_v<OP, op_floor>) return eve::floor(first);
     else if constexpr (std::is_same_v<OP, op_ceil>)  return eve::ceil(first);
     else static_assert(sizeof(OP) == 0, "unsupported op tag for ropd");

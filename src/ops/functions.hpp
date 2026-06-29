@@ -216,6 +216,12 @@ inline affine_form<T> min(affine_form<T> const& lhs, affine_form<T> const& rhs)
 }
 
 template<std::floating_point T>
+inline affine_form<T> min(affine_context<T> const& context, affine_form<T> const& lhs, affine_form<T> const& rhs)
+{
+    return finalize(context, min(lhs, rhs));
+}
+
+template<std::floating_point T>
 inline affine_form<T> max(affine_form<T> const& lhs, affine_form<T> const& rhs)
 {
     auto a1 = lhs.min(), b1 = lhs.max();
@@ -225,6 +231,12 @@ inline affine_form<T> max(affine_form<T> const& lhs, affine_form<T> const& rhs)
     auto lo = std::fmax(a1, a2);
     auto hi = std::fmax(b1, b2);
     return affine_form<T>(lhs.context(), interval<T>(lo, hi));
+}
+
+template<std::floating_point T>
+inline affine_form<T> max(affine_context<T> const& context, affine_form<T> const& lhs, affine_form<T> const& rhs)
+{
+    return finalize(context, max(lhs, rhs));
 }
 
 template<std::floating_point T>

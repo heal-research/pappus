@@ -662,9 +662,11 @@ public:
     {
         if constexpr (std::floating_point<T>) {
             if (is_empty()) return interval::empty();
-            return interval(fp::ropd<fp::op_floor>(inf()), fp::ropu<fp::op_ceil>(sup()));
+            // floor is monotonically non-decreasing: floor([a,b]) = [floor(a), floor(b)].
+            // floor/ceil produce exact integers; directed rounding is a no-op.
+            return interval(fp::ropd<fp::op_floor>(inf()), fp::ropu<fp::op_floor>(sup()));
         } else {
-            return interval(fp::ropd<fp::op_floor>(inf()), fp::ropu<fp::op_ceil>(sup()));
+            return interval(fp::ropd<fp::op_floor>(inf()), fp::ropu<fp::op_floor>(sup()));
         }
     }
 
@@ -672,6 +674,7 @@ public:
     {
         if constexpr (std::floating_point<T>) {
             if (is_empty()) return interval::empty();
+            // ceil is monotonically non-decreasing: ceil([a,b]) = [ceil(a), ceil(b)].
             return interval(fp::ropd<fp::op_ceil>(inf()), fp::ropu<fp::op_ceil>(sup()));
         } else {
             return interval(fp::ropd<fp::op_ceil>(inf()), fp::ropu<fp::op_ceil>(sup()));
