@@ -2,92 +2,82 @@
 #define PAPPUS_INTERVAL_BOX_HPP
 
 #include <algorithm>
+#include <concepts>
+#include <limits>
 #include <numeric>
-#include <vector>
 #include <queue>
+#include <vector>
 
 #include "interval.hpp"
 
 namespace pappus {
 
-using box = std::vector<interval>;
+template<std::floating_point T = double>
+using box = std::vector<interval<T>>;
 
-template<typename F>
-interval optimize_bounds(F&& f, box const& x, bool m = false, double w = 1e-5, size_t n = 1000)
+template<std::floating_point T = double, typename F>
+interval<T> optimize_bounds(F&& f, box<T> const& x, bool m = false, T w = T(1e-5), size_t n = 1000)
 {
-    static_assert(std::is_invocable_r_v<interval, F, box const&>);
+    static_assert(std::is_invocable_r_v<interval<T>, F, box<T> const&>);
 
-    using T = std::tuple<double, double, box>;
+    using Tuple = std::tuple<T, T, box<T>>;
 
-    auto get_bound = [&](interval iv) { return m ? -iv.sup() : iv.inf(); };
-
-    auto get_volume = [](auto&& box) {
-        return std::transform_reduce(cbegin(box), cend(box), -1, std::multiplies{}, [](auto iv) { return iv.diameter(); });
+    auto get_bound  = [&](interval<T> iv) { return m ? -iv.sup() : iv.inf(); };
+    auto get_volume = [](auto const& bx) {
+        return std::transform_reduce(cbegin(bx), cend(bx), T(1), std::multiplies<T>{},
+                                      [](auto iv) { return iv.diameter(); });
     };
-
-    auto compare = [](auto&& a, auto&& b) {
+    auto widest_splittable_dimension = [&](auto const& bx) -> std::optional<std::size_t> {
+        std::optional<std::size_t> best;
+        T best_diameter = w;
+        for (std::size_t i = 0; i < bx.size(); ++i) {
+            auto diameter = bx[i].diameter();
+            if (diameter > best_diameter) {
+                best = i;
+                best_diameter = diameter;
+            }
+        }
+        return best;
+    };
+    auto compare = [](auto const& a, auto const& b) {
         return std::tie(std::get<0>(a), std::get<1>(a)) > std::tie(std::get<0>(b), std::get<1>(b));
     };
 
-    // a priority queue to keep track of the bounds
-    std::priority_queue<T, std::vector<T>, decltype(compare)> q(compare); 
-
-    //auto best_bound = get_bound(f(x)); // best bound so far
+    std::priority_queue<Tuple, std::vector<Tuple>, decltype(compare)> q(compare);
     q.push({ get_bound(f(x)), get_volume(x), x });
 
-    auto best_bound = fp::inf;
-    box new_box(x.size());
-    std::vector<box> splits(x.size());
+    T best_bound = fp::inf_v<T>;
 
-    while(!q.empty() && n-- > 0) {
-        auto [bound, volume, box] = q.top(); q.pop();
-        // can we split the current hyperbox into smaller regions
-        if (std::none_of(cbegin(box), cend(box), [&](auto iv) { return iv.diameter() > w; })) {
+    while (!q.empty() && n-- > 0) {
+        auto [bound, volume, bx] = q.top(); q.pop();
+        auto split_dimension = widest_splittable_dimension(bx);
+        if (!split_dimension) {
             best_bound = std::min(best_bound, bound);
             continue;
         }
 
-        for (size_t i = 0; i < box.size(); ++i) {
-            auto iv = box[i];
-            // do the splitting and put the results in the splits vector
-            splits[i].clear();
-            if (iv.diameter() > w) {
-                auto [left, right] = iv.split();
-                splits[i].push_back(left);
-                splits[i].push_back(right);
-            } else {
-                splits[i].push_back(iv);
-            }
-        }
-
-        auto best_ = std::numeric_limits<double>::max();
-        // do a cartesian product in-place to avoid temporaries using this lambda
-        auto perm = [&](auto i, auto&& perm) {
-            if (i == x.size()) {
-                auto tmp = new_box; // make a copy
-                q.push({ get_bound(f(tmp)), get_volume(tmp), tmp });
-                return;
-            }
-            for (auto iv : splits[i]) {
-                new_box[i] = iv; 
-                perm(i+1, perm);
-            }
+        auto [left, right] = bx[*split_dimension].split();
+        auto push_child = [&](interval<T> child) {
+            auto next = bx;
+            next[*split_dimension] = child;
+            q.push({ get_bound(f(next)), get_volume(next), std::move(next) });
         };
-        perm(0, perm);
+
+        push_child(left);
+        push_child(right);
     }
-    if (!q.empty()) {
+    if (!q.empty())
         best_bound = std::min(best_bound, std::get<0>(q.top()));
-    }
-    // we could return a double here (the best bound) but an interval is cheap enough 
-    return m ? interval(-fp::inf, -best_bound) : interval(best_bound, fp::inf);
+
+    return m ? interval<T>(-fp::inf_v<T>, -best_bound)
+             : interval<T>(best_bound, fp::inf_v<T>);
 }
 
-template<typename F>
-interval optimize_bounds(F&& f, box const& x, double w = 1e-5, size_t n = 1000)
+template<std::floating_point T = double, typename F>
+interval<T> optimize_bounds(F&& f, box<T> const& x, T w = T(1e-5), size_t n = 1000)
 {
-    return optimize_bounds(f, x, false, w, n) & optimize_bounds(f, x, true, w, n);
+    return optimize_bounds<T>(f, x, false, w, n) & optimize_bounds<T>(f, x, true, w, n);
 }
 
-} // namespace
+} // namespace pappus
 #endif
-
