@@ -8,11 +8,23 @@
     foolnotion.inputs.nixpkgs.follows = "nixpkgs";
   };
 
-  outputs = inputs @ { self, flake-parts, foolnotion, nixpkgs }:
+  outputs =
+    inputs@{
+      self,
+      flake-parts,
+      foolnotion,
+      nixpkgs,
+    }:
     flake-parts.lib.mkFlake { inherit inputs; } rec {
-      systems = [ "x86_64-linux" "x86_64-darwin" "aarch64-linux" "aarch64-darwin" ];
+      systems = [
+        "x86_64-linux"
+        "x86_64-darwin"
+        "aarch64-linux"
+        "aarch64-darwin"
+      ];
 
-      perSystem = { pkgs, system, ... }:
+      perSystem =
+        { pkgs, system, ... }:
         let
           pkgs = import nixpkgs {
             inherit system;
@@ -26,13 +38,17 @@
 
             cmakeFlags = [
               "-DBUILD_TESTS=OFF"
-              "-DUSE_CRLIBM=OFF"
+              "-DUSE_COREMATH=OFF"
               "-DCMAKE_BUILD_TYPE=Release"
             ];
 
             nativeBuildInputs = with pkgs; [ cmake ];
 
-            buildInputs = with pkgs; [ eigen openlibm ];
+            buildInputs = with pkgs; [
+              gch-small-vector
+              eve
+              openlibm
+            ];
           };
 
           enableTesting = true;
@@ -43,11 +59,24 @@
           devShells.default = stdenv_.mkDerivation {
             name = "pappus-dev";
 
-            nativeBuildInputs = pappus.nativeBuildInputs ++ (with pkgs; [ clang-tools bear ]);
+            nativeBuildInputs =
+              pappus.nativeBuildInputs
+              ++ (with pkgs; [
+                clang-tools
+                bear
+              ]);
 
-            buildInputs = pappus.buildInputs
-              ++ (with pkgs; pkgs.lib.optionals pkgs.stdenv.isLinux [ gdb valgrind linuxPackages.perf ])
-              ++ (with pkgs; pkgs.lib.optionals enableTesting [ crlibm doctest ]);
+            buildInputs =
+              pappus.buildInputs
+              ++ (
+                with pkgs;
+                pkgs.lib.optionals pkgs.stdenv.isLinux [
+                  gdb
+                  valgrind
+                  linuxPackages.perf
+                ]
+              )
+              ++ (with pkgs; pkgs.lib.optionals enableTesting [ catch2_3 ]);
           };
         };
     };

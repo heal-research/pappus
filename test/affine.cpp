@@ -1,13 +1,11 @@
-#define DOCTEST_CONFIG_IMPLEMENT_WITH_MAIN
-#include <doctest/doctest.h>
+#include <catch2/catch_all.hpp>
 
 #include "aa.h"
 #include "pappus.hpp"
 
-#include <Eigen/Eigen>
 
-using af = pappus::affine_form;
-using ai = pappus::interval;
+using af = pappus::affine_form<double>;
+using ai = pappus::interval<double>;
 
 constexpr double eps = std::numeric_limits<double>::epsilon();
 
@@ -260,6 +258,13 @@ TEST_CASE("affine_form::inv()")
     CHECK(y1.to_interval() == y2.convert());
 }
 
+TEST_CASE("affine_form::inv() rejects intervals containing zero")
+{
+    pappus::affine_context ctx;
+    CHECK_THROWS_AS(af(ctx, ai(-1.0, 1.0)).inv(), std::invalid_argument);
+    CHECK_THROWS_AS(af(ctx, 0.0).inv(), std::invalid_argument);
+}
+
 TEST_CASE("affine_form::pow(int)")
 {
     ai u1(1, 4);
@@ -297,6 +302,70 @@ TEST_CASE("affine_form::pow(double)")
     CHECK(y1 == y2);
 }
 
+TEST_CASE("affine_form::pow(double) domain checks")
+{
+    pappus::affine_context ctx;
+
+    CHECK_THROWS_AS(af(ctx, ai(-1.0, 4.0)).pow(0.5), std::invalid_argument);
+    CHECK_THROWS_AS(af(ctx, ai(0.0, 4.0)).pow(-0.5), std::invalid_argument);
+}
+
+TEST_CASE("affine_form::last_index() on constant form")
+{
+    pappus::affine_context ctx;
+    af x(ctx, 1.0);
+    CHECK_THROWS_AS(x.last_index(), std::logic_error);
+}
+
+TEST_CASE("affine_form point interval stays constant")
+{
+    pappus::affine_context ctx;
+    af x(ctx, ai(2.0, 2.0));
+    CHECK(x.length() == 0);
+    CHECK(x.radius() == 0.0);
+
+    auto y = x.pow(2.0);
+    CHECK(y.length() == 0);
+    CHECK(y.to_interval() == ai(4.0, 4.0));
+
+    auto z = af::pow(2.0, x);
+    CHECK(z.length() == 0);
+    CHECK(z.to_interval() == ai(4.0, 4.0));
+}
+
+TEST_CASE("affine_form rejects mixed contexts")
+{
+    pappus::affine_context lhs_ctx;
+    pappus::affine_context rhs_ctx;
+    af x(lhs_ctx, ai(-1.0, 1.0));
+    af y(rhs_ctx, ai(2.0, 3.0));
+
+    CHECK_THROWS_AS(x + y, std::invalid_argument);
+    CHECK_THROWS_AS(x - y, std::invalid_argument);
+    CHECK_THROWS_AS(x * y, std::invalid_argument);
+    CHECK_THROWS_AS(x / y, std::invalid_argument);
+    CHECK_THROWS_AS(x.pow(y), std::invalid_argument);
+}
+
+TEST_CASE("affine_form keeps context state alive")
+{
+    auto make_form = []() {
+        pappus::affine_context ctx;
+        return af(ctx, ai(1.0, 2.0));
+    };
+
+    auto x = make_form();
+    auto y = x + 1.0;
+    CHECK(y.to_interval() == ai(2.0, 3.0));
+}
+
+TEST_CASE("affine_context approximation mode setter")
+{
+    pappus::affine_context ctx;
+    ctx.set_approximation_mode(pappus::approximation_mode::SECANT);
+    CHECK(ctx.approximation_mode() == pappus::approximation_mode::SECANT);
+}
+
 TEST_CASE("affine_form::pow(af)")
 {
     auto check_exp = [](auto const& base, auto const& exponent) {
@@ -311,12 +380,12 @@ TEST_CASE("affine_form::pow(af)")
 
         auto w1 = y1.to_interval();
         auto w2 = y2.convert();
-        CHECK(doctest::Approx(w1.inf()) == w2.getlo());
-        CHECK(doctest::Approx(w1.sup()) == w2.gethi());
+        CHECK(Catch::Approx(w1.inf()) == w2.getlo());
+        CHECK(Catch::Approx(w1.sup()) == w2.gethi());
     };
 
-    SUBCASE("[1, 4] ^ [0, 0.5]") { check_exp(ai(1.0, 4.0), ai(0.0, 0.5)); }
-    SUBCASE("[0.1, 2] ^ [-1, 0]") { check_exp(ai(0.1, 2.0), ai(-1.0, 0.0)); }
+    SECTION("[1, 4] ^ [0, 0.5]") { check_exp(ai(1.0, 4.0), ai(0.0, 0.5)); }
+    SECTION("[0.1, 2] ^ [-1, 0]") { check_exp(ai(0.1, 2.0), ai(-1.0, 0.0)); }
 }
 
 TEST_CASE("affine_form::pow(double, af)")
@@ -339,7 +408,7 @@ TEST_CASE("affine_form::pow(double, af)")
 
 TEST_CASE("affine_form::sqrt()")
 {
-    pappus::interval u1(1, 4);
+    ai u1(1.0, 4.0);
     pappus::affine_context ctx;
     af x1(ctx, u1);
     auto y1 = x1.sqrt();
@@ -348,12 +417,12 @@ TEST_CASE("affine_form::sqrt()")
     AAF x2(u2);
     auto y2 = sqrt(x2);
 
-    CHECK_EQ(y1.to_interval(), y2.convert());
+    CHECK(y1.to_interval() == y2.convert());
 }
 
 TEST_CASE("affine_form::isqrt()")
 {
-    pappus::interval u1(2, 7);
+    ai u1(2.0, 7.0);
     pappus::affine_context ctx;
     af x1(ctx, u1);
     auto y1 = x1.isqrt();
@@ -362,7 +431,243 @@ TEST_CASE("affine_form::isqrt()")
     AAF x2(u2);
     auto y2 = isqrt(x2);
 
-    CHECK_EQ(y1.to_interval(), y2.convert());
+    CHECK(y1.to_interval() == y2.convert());
+}
+
+/******************************************************
+ * Transcendental function tests                      *
+ *****************************************************/
+
+// Returns true if result.to_interval() contains f(x) (to within 4 ULP) for 200 sampled x.
+// The 4-ULP slack accounts for rounding in the Chebyshev coefficient computation — the
+// approximation is mathematically exact at the endpoints but FP rounding can push the
+// computed bound by 1-2 ULP relative to f(endpoint).
+template<typename Scalar>
+bool sound(pappus::affine_form<double> const& result, Scalar f, ai const& range, int n = 200)
+{
+    ai ri = result.to_interval();
+    double lo = range.inf(), hi = range.sup(), step = (hi - lo) / n;
+    constexpr double eps4 = 4 * std::numeric_limits<double>::epsilon();
+    double slack = eps4 * std::max({1.0, std::fabs(ri.inf()), std::fabs(ri.sup())});
+    for (int i = 0; i <= n; ++i) {
+        double y = f(lo + i * step);
+        if (y < ri.inf() - slack || y > ri.sup() + slack) return false;
+    }
+    return true;
+}
+
+TEST_CASE("affine_form::exp()")
+{
+    pappus::affine_context ctx;
+
+    // constant form
+    CHECK(af(ctx, 1.0).exp().to_interval() == ai(std::exp(1.0)));
+
+    ai u(0.5, 1.5);
+    af x(ctx, u);
+    auto y = x.exp();
+    CHECK(sound(y, [](double x) { return std::exp(x); }, u));
+    CHECK(y.to_interval().inf() <= std::exp(0.5));
+    CHECK(y.to_interval().sup() >= std::exp(1.5));
+
+    ai u2(-1.0, 1.0);
+    af x2(ctx, u2);
+    CHECK(sound(x2.exp(), [](double x) { return std::exp(x); }, u2));
+}
+
+TEST_CASE("affine_form::log()")
+{
+    pappus::affine_context ctx;
+
+    CHECK(af(ctx, 1.0).log().to_interval() == ai(0.0));
+
+    ai u(1.0, 4.0);
+    af x(ctx, u);
+    auto y = x.log();
+    CHECK(sound(y, [](double x) { return std::log(x); }, u));
+    CHECK(y.to_interval().sup() >= std::log(4.0));
+
+    CHECK_THROWS_AS(af(ctx, ai(0.0, 1.0)).log(), std::invalid_argument);
+    CHECK_THROWS_AS(af(ctx, -1.0).log(),          std::invalid_argument);
+}
+
+TEST_CASE("affine_form::sin()")
+{
+    pappus::affine_context ctx;
+
+    CHECK(af(ctx, 0.0).sin().to_interval() == ai(0.0));
+
+    // Monotone piece: sin is decreasing on [π/2, π]
+    ai u(pappus::fp::half_pi_v<double>, pappus::fp::pi_v<double>);
+    af x(ctx, u);
+    auto y = x.sin();
+    CHECK(sound(y, [](double x) { return std::sin(x); }, u));
+
+    // Non-monotone: sin on [0, π] has max at π/2
+    ai u2(0.0, pappus::fp::pi_v<double>);
+    af x2(ctx, u2);
+    auto y2 = x2.sin();
+    CHECK(sound(y2, [](double x) { return std::sin(x); }, u2));
+
+    // Full period → returns [-1, 1]
+    ai u3(0.0, pappus::fp::two_pi_v<double> + 0.1);
+    af x3(ctx, u3);
+    auto y3 = x3.sin();
+    CHECK(y3.to_interval().inf() <= -1.0);
+    CHECK(y3.to_interval().sup() >= 1.0);
+}
+
+TEST_CASE("affine_form::cos()")
+{
+    pappus::affine_context ctx;
+
+    CHECK(af(ctx, 0.0).cos().to_interval() == ai(1.0));
+
+    // Monotone decreasing: cos on [0, π]
+    ai u(0.0, pappus::fp::pi_v<double>);
+    af x(ctx, u);
+    auto y = x.cos();
+    CHECK(sound(y, [](double x) { return std::cos(x); }, u));
+
+    // Contains max at 0 and min at π
+    CHECK(y.to_interval().sup() >= 1.0);
+    CHECK(y.to_interval().inf() <= -1.0);
+
+    ai u2(-0.5, 0.5);
+    af x2(ctx, u2);
+    CHECK(sound(x2.cos(), [](double x) { return std::cos(x); }, u2));
+}
+
+TEST_CASE("affine_form::tan()")
+{
+    pappus::affine_context ctx;
+
+    CHECK(af(ctx, 0.0).tan().to_interval() == ai(0.0));
+
+    ai u(-0.5, 0.5);
+    af x(ctx, u);
+    auto y = x.tan();
+    CHECK(sound(y, [](double x) { return std::tan(x); }, u));
+
+    // Crosses asymptote at π/2
+    CHECK_THROWS_AS(af(ctx, ai(0.0, 2.0)).tan(), std::domain_error);
+}
+
+TEST_CASE("affine_form::sinh()")
+{
+    pappus::affine_context ctx;
+
+    CHECK(af(ctx, 0.0).sinh().to_interval() == ai(0.0));
+
+    ai u(-1.0, 1.0);
+    af x(ctx, u);
+    auto y = x.sinh();
+    CHECK(sound(y, [](double x) { return std::sinh(x); }, u));
+
+    ai u2(0.5, 2.0);
+    af x2(ctx, u2);
+    CHECK(sound(x2.sinh(), [](double x) { return std::sinh(x); }, u2));
+
+    ai u3(-2.0, -0.5);
+    af x3(ctx, u3);
+    CHECK(sound(x3.sinh(), [](double x) { return std::sinh(x); }, u3));
+}
+
+TEST_CASE("affine_form::cosh()")
+{
+    pappus::affine_context ctx;
+
+    CHECK(af(ctx, 0.0).cosh().to_interval() == ai(1.0));
+
+    // Symmetric, minimum at 0
+    ai u(-1.0, 1.0);
+    af x(ctx, u);
+    auto y = x.cosh();
+    CHECK(sound(y, [](double x) { return std::cosh(x); }, u));
+
+    // Positive-only
+    ai u2(0.5, 2.0);
+    af x2(ctx, u2);
+    CHECK(sound(x2.cosh(), [](double x) { return std::cosh(x); }, u2));
+
+    // Negative-only
+    ai u3(-2.0, -0.5);
+    af x3(ctx, u3);
+    CHECK(sound(x3.cosh(), [](double x) { return std::cosh(x); }, u3));
+}
+
+TEST_CASE("affine_form::tanh()")
+{
+    pappus::affine_context ctx;
+
+    CHECK(af(ctx, 0.0).tanh().to_interval() == ai(0.0));
+
+    ai u(-1.0, 1.0);
+    af x(ctx, u);
+    auto y = x.tanh();
+    CHECK(sound(y, [](double x) { return std::tanh(x); }, u));
+    CHECK(y.to_interval().inf() >= -1.0);
+    CHECK(y.to_interval().sup() <=  1.0);
+
+    ai u2(0.5, 2.0);
+    af x2(ctx, u2);
+    CHECK(sound(x2.tanh(), [](double x) { return std::tanh(x); }, u2));
+
+    ai u3(-2.0, -0.5);
+    af x3(ctx, u3);
+    CHECK(sound(x3.tanh(), [](double x) { return std::tanh(x); }, u3));
+}
+
+TEST_CASE("affine_form::asin()")
+{
+    pappus::affine_context ctx;
+
+    CHECK(af(ctx, 0.0).asin().to_interval() == ai(0.0));
+    CHECK(af(ctx, 1.0).asin().to_interval() == ai(pappus::fp::half_pi_v<double>));
+
+    ai u(-0.8, 0.8);
+    af x(ctx, u);
+    auto y = x.asin();
+    CHECK(sound(y, [](double x) { return std::asin(x); }, u));
+
+    CHECK_THROWS_AS(af(ctx, ai(-2.0, 0.0)).asin(), std::domain_error);
+}
+
+TEST_CASE("affine_form::acos()")
+{
+    pappus::affine_context ctx;
+
+    CHECK(af(ctx, 1.0).acos().to_interval() == ai(0.0));
+    CHECK(af(ctx, 0.0).acos().to_interval() == ai(pappus::fp::half_pi_v<double>));
+
+    ai u(-0.8, 0.8);
+    af x(ctx, u);
+    auto y = x.acos();
+    CHECK(sound(y, [](double x) { return std::acos(x); }, u));
+
+    CHECK_THROWS_AS(af(ctx, ai(0.0, 2.0)).acos(), std::domain_error);
+}
+
+TEST_CASE("affine_form::atan()")
+{
+    pappus::affine_context ctx;
+
+    CHECK(af(ctx, 0.0).atan().to_interval() == ai(0.0));
+
+    ai u(-2.0, 2.0);
+    af x(ctx, u);
+    auto y = x.atan();
+    CHECK(sound(y, [](double x) { return std::atan(x); }, u));
+    CHECK(y.to_interval().inf() >= -pappus::fp::half_pi_v<double>);
+    CHECK(y.to_interval().sup() <=  pappus::fp::half_pi_v<double>);
+
+    ai u2(0.5, 3.0);
+    af x2(ctx, u2);
+    CHECK(sound(x2.atan(), [](double x) { return std::atan(x); }, u2));
+
+    ai u3(-3.0, -0.5);
+    af x3(ctx, u3);
+    CHECK(sound(x3.atan(), [](double x) { return std::atan(x); }, u3));
 }
 
 /******************************************************
@@ -370,7 +675,7 @@ TEST_CASE("affine_form::isqrt()")
  *****************************************************/
 TEST_CASE("X^2 + X")
 {
-    SUBCASE("Dependency problem")
+    SECTION("Dependency problem")
     {
         ai u1(-1, 1);
         pappus::affine_context ctx;
@@ -384,35 +689,19 @@ TEST_CASE("X^2 + X")
         AAF z2 = x2 * x2 + x2;
 
         CHECK(z1.to_interval() == z2.convert());
-
-        std::cout << z1.to_interval() << "\n";
-        std::cout << z2.convert() << "\n";
     }
 
-    SUBCASE("Rewrite")
+    SECTION("Rewrite")
     {
         pappus::affine_context ctx;
         ai u1(-1, 1);
         af x1(ctx, u1);
-        std::cout << "x1:\n"
-                  << x1 << "\n";
-        std::cout << "x1 interval: " << x1.to_interval() << "\n";
         auto z1 = (x1 + 0.5).pow(2.0) - 0.25;
-        std::cout << "z1:\n"
-                  << z1 << "\n";
-        std::cout << "z1 interval: " << z1.to_interval() << "\n";
 
         AAInterval u2(u1.inf(), u1.sup());
         AAF x2(u2);
         AAF z2 = ((x2 + 0.5) ^ 2) - 0.25;
-        std::cout << "x2:\n"
-                  << x2;
-        std::cout << "x2 interval:\n"
-                  << x2.convert() << "\n";
 
-        std::cout << "z2:\n"
-                  << z2;
-        std::cout << "z2 interval:\n"
-                  << z2.convert() << "\n";
+        CHECK(z1.to_interval() == z2.convert());
     }
 }
