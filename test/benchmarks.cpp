@@ -2,8 +2,7 @@
 #include <functional>
 #include <random>
 #include <sstream>
-#define ANKERL_NANOBENCH_IMPLEMENT
-#include "nanobench.h"
+#include <nanobench.h>
 #include <queue>
 #include <algorithm>
 

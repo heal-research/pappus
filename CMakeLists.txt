@@ -1,6 +1,5 @@
 cmake_minimum_required(VERSION 3.6)
 
-include(FetchContent)
 include(FeatureSummary)
 
 project(pappus_proj
@@ -24,25 +23,6 @@ feature_summary(WHAT DISABLED_FEATURES DESCRIPTION "Disabled features:" QUIET_ON
 
 if(BUILD_TESTS)
     enable_testing()
-    FetchContent_Declare(
-        aaflib
-        GIT_REPOSITORY https://github.com/foolnotion/aaflib.git
-        GIT_TAG master
-        DOWNLOAD_DIR ${PROJECT_SOURCE_DIR}/thirdparty/aaflib
-        SOURCE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/aaflib
-        )
-    FetchContent_MakeAvailable(aaflib)
-    SET(AAF_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/aaflib)
-
-    FetchContent_Declare(
-        nanobench 
-        DOWNLOAD_DIR ${PROJECT_SOURCE_DIR}/thirdparty/nanobench/
-        URL https://raw.githubusercontent.com/martinus/nanobench/master/src/include/nanobench.h
-        DOWNLOAD_NO_EXTRACT 1
-        )
-    FetchContent_MakeAvailable(nanobench)
-    SET(NANOBENCH_INCLUDE_DIR ${PROJECT_SOURCE_DIR}/thirdparty/nanobench)
-
     add_subdirectory(test)
 endif()
 

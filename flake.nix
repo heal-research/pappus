@@ -76,7 +76,7 @@
                   linuxPackages.perf
                 ]
               )
-              ++ (with pkgs; pkgs.lib.optionals enableTesting [ catch2_3 ]);
+              ++ (with pkgs; pkgs.lib.optionals enableTesting [ catch2_3 nanobench aaflib ]);
           };
         };
     };
