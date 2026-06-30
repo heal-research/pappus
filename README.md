@@ -38,20 +38,30 @@ or mix them as needed.
 - [`gch::small_vector`](https://github.com/gharveymn/small_vector)
 - [`eve`](https://github.com/jfalcou/eve) (used internally for a few FP helpers)
 
+Tests additionally require [Catch2 3](https://github.com/catchorg/Catch2),
+[aaflib](https://github.com/foolnotion/aaflib), and
+[nanobench](https://github.com/martinus/nanobench).
+
 ## Building
+
+With Nix, `nix develop` provides all dependencies including test deps:
+
+```sh
+nix develop
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+ctest --test-dir build
+```
+
+Without Nix, install the dependencies above and:
 
 ```sh
 cmake -B build -DCMAKE_BUILD_TYPE=Release
 cmake --build build
+ctest --test-dir build  # requires Catch2, aaflib, nanobench on the path
 ```
 
-Tests require [Catch2 3](https://github.com/catchorg/Catch2) and are enabled by
-default (`-DBUILD_TESTS=OFF` to skip).  The test binary fetches `aaflib` at
-configure time for cross-checking results.
-
-```sh
-cmake --build build && ctest --test-dir build
-```
+Pass `-DBUILD_TESTS=OFF` to skip tests.
 
 ## Basic usage
 
