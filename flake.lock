@@ -1,5 +1,31 @@
 {
   "nodes": {
+    "aaflib": {
+      "inputs": {
+        "flake-parts": [
+          "flake-parts"
+        ],
+        "foolnotion": [
+          "foolnotion"
+        ],
+        "nixpkgs": [
+          "nixpkgs"
+        ]
+      },
+      "locked": {
+        "lastModified": 1782807344,
+        "narHash": "sha256-oVhEuu6rEiI2gCz1dY+qe0dOm1UIOqU2qLH8ICZfTSw=",
+        "owner": "foolnotion",
+        "repo": "aaflib",
+        "rev": "af154f66d79998f5b0c9d5f185f6d3d49a859547",
+        "type": "github"
+      },
+      "original": {
+        "owner": "foolnotion",
+        "repo": "aaflib",
+        "type": "github"
+      }
+    },
     "flake-parts": {
       "inputs": {
         "nixpkgs-lib": "nixpkgs-lib"
@@ -71,6 +97,7 @@
     },
     "root": {
       "inputs": {
+        "aaflib": "aaflib",
         "flake-parts": "flake-parts",
         "foolnotion": "foolnotion",
         "nixpkgs": "nixpkgs"

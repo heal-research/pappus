@@ -6,6 +6,10 @@
     nixpkgs.url = "github:nixos/nixpkgs/master";
     foolnotion.url = "github:foolnotion/nur-pkg";
     foolnotion.inputs.nixpkgs.follows = "nixpkgs";
+    aaflib.url = "github:foolnotion/aaflib";
+    aaflib.inputs.nixpkgs.follows = "nixpkgs";
+    aaflib.inputs.foolnotion.follows = "foolnotion";
+    aaflib.inputs.flake-parts.follows = "flake-parts";
   };
 
   outputs =
@@ -14,6 +18,7 @@
       flake-parts,
       foolnotion,
       nixpkgs,
+      aaflib,
     }:
     flake-parts.lib.mkFlake { inherit inputs; } rec {
       systems = [
@@ -24,7 +29,7 @@
       ];
 
       perSystem =
-        { pkgs, system, ... }:
+        { pkgs, system, inputs', ... }:
         let
           pkgs = import nixpkgs {
             inherit system;
@@ -76,7 +81,11 @@
                   linuxPackages.perf
                 ]
               )
-              ++ (with pkgs; pkgs.lib.optionals enableTesting [ catch2_3 nanobench aaflib ]);
+              ++ pkgs.lib.optionals enableTesting [
+                pkgs.catch2_3
+                pkgs.nanobench
+                inputs'.aaflib.packages.default
+              ];
           };
         };
     };
