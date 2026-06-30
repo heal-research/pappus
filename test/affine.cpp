@@ -705,3 +705,316 @@ TEST_CASE("X^2 + X")
         CHECK(z1.to_interval() == z2.convert());
     }
 }
+
+/******************************************************
+ * Domain predicates                                  *
+ *****************************************************/
+
+TEST_CASE("domain predicates: log")
+{
+    CHECK(pappus::log_domain_ok(ai(0.5, 2.0)));
+    CHECK(pappus::log_domain_ok(ai(1.0, 1.0)));
+    CHECK_FALSE(pappus::log_domain_ok(ai(0.0, 2.0)));   // inf == 0
+    CHECK_FALSE(pappus::log_domain_ok(ai(-1.0, 2.0)));  // inf < 0
+    CHECK_FALSE(pappus::log_domain_ok(ai(-2.0, -1.0))); // all negative
+    CHECK_FALSE(pappus::log_domain_ok(ai::empty()));
+
+    pappus::affine_context ctx;
+    CHECK(pappus::log_domain_ok(af(ctx, ai(1.0, 4.0))));
+    CHECK_FALSE(pappus::log_domain_ok(af(ctx, ai(0.0, 4.0))));
+}
+
+TEST_CASE("domain predicates: sqrt")
+{
+    CHECK(pappus::sqrt_domain_ok(ai(0.0, 2.0)));  // sqrt(0) valid
+    CHECK(pappus::sqrt_domain_ok(ai(1.0, 4.0)));
+    CHECK_FALSE(pappus::sqrt_domain_ok(ai(-0.5, 2.0)));
+    CHECK_FALSE(pappus::sqrt_domain_ok(ai(-2.0, -1.0)));
+    CHECK_FALSE(pappus::sqrt_domain_ok(ai::empty()));
+}
+
+TEST_CASE("domain predicates: isqrt")
+{
+    CHECK(pappus::isqrt_domain_ok(ai(1.0, 4.0)));
+    CHECK_FALSE(pappus::isqrt_domain_ok(ai(0.0, 4.0)));  // isqrt(0) = inf
+    CHECK_FALSE(pappus::isqrt_domain_ok(ai(-1.0, 4.0)));
+    CHECK_FALSE(pappus::isqrt_domain_ok(ai::empty()));
+}
+
+TEST_CASE("domain predicates: inv")
+{
+    CHECK(pappus::inv_domain_ok(ai(1.0, 2.0)));
+    CHECK(pappus::inv_domain_ok(ai(-2.0, -1.0)));
+    CHECK_FALSE(pappus::inv_domain_ok(ai(-1.0, 1.0)));  // straddles 0
+    CHECK_FALSE(pappus::inv_domain_ok(ai(0.0, 1.0)));   // inf == 0
+    CHECK_FALSE(pappus::inv_domain_ok(ai(-1.0, 0.0)));  // sup == 0
+    CHECK_FALSE(pappus::inv_domain_ok(ai::empty()));
+}
+
+TEST_CASE("domain predicates: tan")
+{
+    CHECK(pappus::tan_domain_ok(ai(0.0, 1.0)));
+    CHECK(pappus::tan_domain_ok(ai(-0.5, 0.5)));
+    CHECK(pappus::tan_domain_ok(ai(pappus::fp::pi_v<double> + 0.1, 1.5 * pappus::fp::pi_v<double> - 0.1)));
+    CHECK_FALSE(pappus::tan_domain_ok(ai(0.0, 2.0)));   // crosses π/2
+    CHECK_FALSE(pappus::tan_domain_ok(ai::empty()));
+}
+
+TEST_CASE("domain predicates: asin / acos")
+{
+    CHECK(pappus::asin_domain_ok(ai(-1.0, 1.0)));
+    CHECK(pappus::asin_domain_ok(ai(-0.5, 0.5)));
+    CHECK_FALSE(pappus::asin_domain_ok(ai(-1.5, 0.5)));
+    CHECK_FALSE(pappus::asin_domain_ok(ai(-0.5, 1.5)));
+
+    CHECK(pappus::acos_domain_ok(ai(-1.0, 1.0)));
+    CHECK_FALSE(pappus::acos_domain_ok(ai(-2.0, 0.0)));
+}
+
+TEST_CASE("domain predicates: pow")
+{
+    CHECK(pappus::pow_domain_ok(ai(-2.0, 2.0), 2.0));   // integer exp: any base
+    CHECK(pappus::pow_domain_ok(ai(-2.0, 2.0), 3.0));
+    CHECK_FALSE(pappus::pow_domain_ok(ai(-2.0, 2.0), 0.5));  // fractional: needs inf >= 0
+    CHECK(pappus::pow_domain_ok(ai(0.0, 2.0), 0.5));
+    CHECK(pappus::pow_domain_ok(ai(1.0, 2.0), -1.0));   // negative exp: needs inf > 0
+    CHECK_FALSE(pappus::pow_domain_ok(ai(0.0, 2.0), -1.0)); // inf == 0
+    CHECK_FALSE(pappus::pow_domain_ok(ai(-1.0, 2.0), -1.0));
+}
+
+/******************************************************
+ * try_* wrappers                                     *
+ *****************************************************/
+
+TEST_CASE("try_ wrappers: valid domain returns value matching throwing version")
+{
+    pappus::affine_context ctx;
+
+    auto check = [&](auto try_fn, auto member_fn, ai const& u) {
+        af x(ctx, u);
+        auto opt = try_fn(x);
+        REQUIRE(opt.has_value());
+        CHECK(opt->to_interval() == (x.*member_fn)().to_interval());
+    };
+
+    check(pappus::try_log<double>,   &af::log,   ai(1.0, 4.0));
+    check(pappus::try_log1p<double>, &af::log1p, ai(0.0, 3.0));
+    check(pappus::try_sqrt<double>,  &af::sqrt,  ai(1.0, 4.0));
+    check(pappus::try_isqrt<double>, &af::isqrt, ai(1.0, 4.0));
+    check(pappus::try_inv<double>,   &af::inv,   ai(1.0, 4.0));
+    check(pappus::try_tan<double>,   &af::tan,   ai(-0.5, 0.5));
+    check(pappus::try_asin<double>,  &af::asin,  ai(-0.8, 0.8));
+    check(pappus::try_acos<double>,  &af::acos,  ai(-0.8, 0.8));
+}
+
+TEST_CASE("try_ wrappers: invalid domain returns nullopt")
+{
+    pappus::affine_context ctx;
+
+    CHECK_FALSE(pappus::try_log  (af(ctx, ai(-1.0, 2.0))).has_value()); // inf <= 0
+    CHECK_FALSE(pappus::try_log  (af(ctx, ai(-2.0, -1.0))).has_value());
+    CHECK_FALSE(pappus::try_log1p(af(ctx, ai(-2.0, 0.0))).has_value());  // inf <= -1
+    CHECK_FALSE(pappus::try_sqrt (af(ctx, ai(-1.0, 2.0))).has_value()); // inf < 0
+    CHECK_FALSE(pappus::try_isqrt(af(ctx, ai(0.0, 4.0))).has_value());  // inf == 0
+    CHECK_FALSE(pappus::try_inv  (af(ctx, ai(-1.0, 1.0))).has_value()); // straddles 0
+    CHECK_FALSE(pappus::try_tan  (af(ctx, ai(0.0, 2.0))).has_value());  // crosses π/2
+    CHECK_FALSE(pappus::try_asin (af(ctx, ai(-2.0, 0.5))).has_value());
+    CHECK_FALSE(pappus::try_pow  (af(ctx, ai(-1.0, 2.0)), 0.5).has_value());
+}
+
+/******************************************************
+ * safe_* wrappers                                    *
+ *****************************************************/
+
+// Check that every sample point in the valid subdomain is enclosed.
+template<typename Scalar>
+bool safe_sound(pappus::affine_form<double> const& result, Scalar f,
+                ai const& valid_range, int n = 200)
+{
+    ai ri = result.to_interval();
+    double lo = valid_range.inf(), hi = valid_range.sup(), step = (hi - lo) / n;
+    constexpr double eps4 = 4 * std::numeric_limits<double>::epsilon();
+    double slack = eps4 * std::max({1.0, std::fabs(ri.inf()), std::fabs(ri.sup())});
+    for (int i = 0; i <= n; ++i) {
+        double y = f(lo + i * step);
+        if (!std::isfinite(y)) continue;
+        if (y < ri.inf() - slack || y > ri.sup() + slack) return false;
+    }
+    return true;
+}
+
+TEST_CASE("safe_log")
+{
+    pappus::affine_context ctx;
+
+    SECTION("entirely valid — same as log()")
+    {
+        af x(ctx, ai(1.0, 4.0));
+        auto y = pappus::safe_log(x);
+        REQUIRE(y.has_value());
+        CHECK(y->to_interval() == x.log().to_interval());
+    }
+
+    SECTION("partial overlap — clamps, result is sound on valid subdomain")
+    {
+        af x(ctx, ai(-1.0, 4.0));
+        auto y = pappus::safe_log(x);
+        REQUIRE(y.has_value());
+        auto ri = y->to_interval();
+        // Upper bound must reach log(4); lower bound must be finite (clamped lo > 0)
+        CHECK(ri.sup() >= std::log(4.0));
+        CHECK(std::isfinite(ri.inf()));
+        // Sound on a conservative inner subdomain well within the clamped range
+        CHECK(safe_sound(*y, [](double v) { return std::log(v); }, ai(1e-6, 4.0)));
+    }
+
+    SECTION("entirely invalid — nullopt")
+    {
+        CHECK_FALSE(pappus::safe_log(af(ctx, ai(-2.0, -1.0))).has_value());
+        CHECK_FALSE(pappus::safe_log(af(ctx, ai(-1.0, 0.0))).has_value());
+    }
+}
+
+TEST_CASE("safe_sqrt")
+{
+    pappus::affine_context ctx;
+
+    SECTION("entirely valid")
+    {
+        af x(ctx, ai(0.0, 4.0));
+        auto y = pappus::safe_sqrt(x);
+        REQUIRE(y.has_value());
+        CHECK(y->to_interval() == x.sqrt().to_interval());
+    }
+
+    SECTION("partial overlap")
+    {
+        af x(ctx, ai(-2.0, 4.0));
+        auto y = pappus::safe_sqrt(x);
+        REQUIRE(y.has_value());
+        CHECK(safe_sound(*y, [](double v) { return std::sqrt(v); }, ai(0.0, 4.0)));
+        CHECK(y->to_interval().sup() >= std::sqrt(4.0));
+    }
+
+    SECTION("entirely invalid")
+    {
+        CHECK_FALSE(pappus::safe_sqrt(af(ctx, ai(-4.0, -1.0))).has_value());
+    }
+}
+
+TEST_CASE("safe_isqrt")
+{
+    pappus::affine_context ctx;
+
+    SECTION("entirely valid")
+    {
+        af x(ctx, ai(1.0, 4.0));
+        auto y = pappus::safe_isqrt(x);
+        REQUIRE(y.has_value());
+        CHECK(y->to_interval() == x.isqrt().to_interval());
+    }
+
+    SECTION("partial overlap (includes zero)")
+    {
+        af x(ctx, ai(0.0, 4.0));
+        auto y = pappus::safe_isqrt(x);
+        REQUIRE(y.has_value());
+        double lo = std::numeric_limits<double>::min();
+        CHECK(safe_sound(*y, [](double v) { return 1.0 / std::sqrt(v); }, ai(lo, 4.0)));
+    }
+
+    SECTION("entirely invalid")
+    {
+        CHECK_FALSE(pappus::safe_isqrt(af(ctx, ai(-2.0, 0.0))).has_value());
+    }
+}
+
+TEST_CASE("safe_asin")
+{
+    pappus::affine_context ctx;
+
+    SECTION("entirely valid")
+    {
+        af x(ctx, ai(-0.8, 0.8));
+        auto y = pappus::safe_asin(x);
+        REQUIRE(y.has_value());
+        CHECK(y->to_interval() == x.asin().to_interval());
+    }
+
+    SECTION("clamps inf below -1")
+    {
+        af x(ctx, ai(-2.0, 0.5));
+        auto y = pappus::safe_asin(x);
+        REQUIRE(y.has_value());
+        CHECK(safe_sound(*y, [](double v) { return std::asin(v); }, ai(-1.0, 0.5)));
+    }
+
+    SECTION("clamps sup above 1")
+    {
+        af x(ctx, ai(-0.5, 2.0));
+        auto y = pappus::safe_asin(x);
+        REQUIRE(y.has_value());
+        CHECK(safe_sound(*y, [](double v) { return std::asin(v); }, ai(-0.5, 1.0)));
+    }
+
+    SECTION("entirely outside [-1, 1]")
+    {
+        CHECK_FALSE(pappus::safe_asin(af(ctx, ai(2.0, 3.0))).has_value());
+        CHECK_FALSE(pappus::safe_asin(af(ctx, ai(-3.0, -2.0))).has_value());
+    }
+}
+
+TEST_CASE("safe_acos")
+{
+    pappus::affine_context ctx;
+
+    SECTION("entirely valid")
+    {
+        af x(ctx, ai(-0.8, 0.8));
+        auto y = pappus::safe_acos(x);
+        REQUIRE(y.has_value());
+        CHECK(y->to_interval() == x.acos().to_interval());
+    }
+
+    SECTION("clamps to [-1, 1]")
+    {
+        af x(ctx, ai(-2.0, 2.0));
+        auto y = pappus::safe_acos(x);
+        REQUIRE(y.has_value());
+        CHECK(safe_sound(*y, [](double v) { return std::acos(v); }, ai(-1.0, 1.0)));
+    }
+
+    SECTION("entirely outside [-1, 1]")
+    {
+        CHECK_FALSE(pappus::safe_acos(af(ctx, ai(2.0, 3.0))).has_value());
+    }
+}
+
+TEST_CASE("safe_log1p")
+{
+    pappus::affine_context ctx;
+
+    SECTION("entirely valid")
+    {
+        af x(ctx, ai(0.0, 3.0));
+        auto y = pappus::safe_log1p(x);
+        REQUIRE(y.has_value());
+        CHECK(y->to_interval() == x.log1p().to_interval());
+    }
+
+    SECTION("partial overlap")
+    {
+        af x(ctx, ai(-2.0, 3.0));
+        auto y = pappus::safe_log1p(x);
+        REQUIRE(y.has_value());
+        auto ri = y->to_interval();
+        CHECK(ri.sup() >= std::log1p(3.0));
+        CHECK(std::isfinite(ri.inf()));
+        CHECK(safe_sound(*y, [](double v) { return std::log1p(v); }, ai(-0.9, 3.0)));
+    }
+
+    SECTION("entirely invalid")
+    {
+        CHECK_FALSE(pappus::safe_log1p(af(ctx, ai(-3.0, -1.0))).has_value());
+    }
+}
