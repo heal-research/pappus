@@ -311,6 +311,77 @@ inline affine_form<T> pow(affine_context<T> const& context, T base, affine_form<
     return finalize(context, affine_form<T>::pow(base, exponent));
 }
 
+// ---------------------------------------------------------------------------
+// Composite ops: aq, sqrtabs, logabs
+// ---------------------------------------------------------------------------
+// Each reduces N finalize() calls (one per intermediate ops::xxx call) to 1.
+// With max_terms=0 (default) finalize is a no-op, so the gain is mainly
+// avoiding the intermediate affine_form heap allocation in the affine case.
+
+// aq(x, y) = x / sqrt(1 + y^2)
+// Affine: y is taken by value so *=y is a self-multiply (safe: operator*=
+// builds a temporary, then swaps).  The +=1 shift is a center-only update
+// (no new noise term).  One finalize at the end vs three in the naive path.
+template<std::floating_point T>
+inline interval<T> aq(interval<T> x, interval<T> const& y)
+{
+    return x / (y.square() + interval<T>(T(1))).sqrt();
+}
+
+template<std::floating_point T>
+inline affine_form<T> aq(affine_form<T> x, affine_form<T> y)
+{
+    y *= y;          // y^2 in-place
+    y += T(1);       // 1 + y^2: center shift, no new noise term
+    return x / y.sqrt();
+}
+
+template<std::floating_point T>
+inline affine_form<T> aq(affine_context<T> const& context, affine_form<T> x, affine_form<T> y)
+{
+    return finalize(context, aq(std::move(x), std::move(y)));
+}
+
+// sqrtabs(x) = sqrt(|x|)
+// Reduces 2 finalize calls (abs then sqrt) to 1.
+template<std::floating_point T>
+inline interval<T> sqrtabs(interval<T> value)
+{
+    return value.abs().sqrt();
+}
+
+template<std::floating_point T>
+inline affine_form<T> sqrtabs(affine_form<T> value)
+{
+    return value.abs().sqrt();
+}
+
+template<std::floating_point T>
+inline affine_form<T> sqrtabs(affine_context<T> const& context, affine_form<T> value)
+{
+    return finalize(context, value.abs().sqrt());
+}
+
+// logabs(x) = log(|x|)
+// Reduces 2 finalize calls (abs then log) to 1.
+template<std::floating_point T>
+inline interval<T> logabs(interval<T> value)
+{
+    return value.abs().log();
+}
+
+template<std::floating_point T>
+inline affine_form<T> logabs(affine_form<T> value)
+{
+    return value.abs().log();
+}
+
+template<std::floating_point T>
+inline affine_form<T> logabs(affine_context<T> const& context, affine_form<T> value)
+{
+    return finalize(context, value.abs().log());
+}
+
 } // namespace pappus::ops
 
 #endif
