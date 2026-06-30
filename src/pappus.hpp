@@ -4,5 +4,6 @@
 #include "affine/affine.hpp"
 #include "interval/interval.hpp"
 #include "ops/functions.hpp"
+#include "ops/domain.hpp"
 
 #endif

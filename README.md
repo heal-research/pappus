@@ -25,12 +25,29 @@ or mix them as needed.
   `acos`, `atan`, `floor`, `ceil`, `min`, `max`
 - Composite ops (`aq`, `sqrtabs`, `logabs`) that fuse two primitives to reduce
   intermediate allocations
+- Domain predicates (`log_domain_ok`, `sqrt_domain_ok`, `inv_domain_ok`, …)
+  and non-throwing wrappers (`try_log`, `try_sqrt`, …) returning
+  `std::optional<affine_form<T>>`
 - Optional `condense(k)` to collapse a wide form to at most *k* noise terms,
   trading tightness for speed
 - `evaluate_bisected(f, x, depth)` — recursive bisection helper for tighter
   enclosures at the cost of `2^depth` evaluations
 - `optimize_bounds(f, box, tol, max_iter)` — simple branch-and-bound range
   finder built on interval splitting
+
+## Domain semantics
+
+`interval<T>` and `affine_form<T>` handle out-of-domain inputs differently.
+`interval<T>` returns `empty()` or a clamped result (e.g. `log` on a
+non-positive interval returns `empty()`).  `affine_form<T>` throws — it
+requires a finite Chebyshev approximation over the input range, which is
+undefined when the domain is violated.
+
+In practice this means: if input domains are not guaranteed to avoid
+singularities (e.g. `log` with inputs in `[0, 1]`), `interval<T>` is the
+safer choice.  When using `affine_form<T>`, either ensure safe domains
+upstream or use the `*_domain_ok` predicates and `try_*` wrappers provided
+in `ops/domain.hpp`.
 
 ## Requirements
 
