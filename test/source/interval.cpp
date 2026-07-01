@@ -1,6 +1,6 @@
-#include "interval/interval.hpp"
-#include "interval/box.hpp"
-#include "interval/iterator.hpp"
+#include "pappus/interval/interval.hpp"
+#include "pappus/interval/box.hpp"
+#include "pappus/interval/iterator.hpp"
 #include <iomanip>
 #include <catch2/catch_all.hpp>
 #include <functional>

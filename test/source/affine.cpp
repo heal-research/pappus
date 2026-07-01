@@ -1,7 +1,7 @@
 #include <catch2/catch_all.hpp>
 
 #include "aa.h"
-#include "pappus.hpp"
+#include "pappus/pappus.hpp"
 
 
 using af = pappus::affine_form<double>;
@@ -9,11 +9,15 @@ using ai = pappus::interval<double>;
 
 constexpr double eps = std::numeric_limits<double>::epsilon();
 
+// Relative tolerance: directed rounding in pappus min()/max() can shift
+// bounds by 1 ULP, which exceeds eps for values with magnitude > 1.
 bool operator==(ai const& lhs, AAInterval const& rhs)
 {
-    auto l = std::fabs(lhs.inf() - rhs.getlo());
-    auto u = std::fabs(lhs.sup() - rhs.gethi());
-    return l < eps && u < eps;
+    auto tol = [](double a, double b) {
+        return eps * 32.0 * std::max({1.0, std::fabs(a), std::fabs(b)});
+    };
+    return std::fabs(lhs.inf() - rhs.getlo()) < tol(lhs.inf(), rhs.getlo())
+        && std::fabs(lhs.sup() - rhs.gethi()) < tol(lhs.sup(), rhs.gethi());
 }
 
 bool operator==(AAInterval const& lhs, ai const& rhs)

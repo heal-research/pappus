@@ -333,6 +333,13 @@ inline affine_form<T> aq(affine_form<T> x, affine_form<T> y)
 {
     y *= y;          // y^2 in-place
     y += T(1);       // 1 + y^2: center shift, no new noise term
+    // 1+y_input^2 ≥ 1 always, but the affine form can overapproximate below 0
+    // for wide inputs.  When that happens, sqrt() would throw.  Fall back to an
+    // interval-arithmetic denominator: sqrt([1, y.max()]) ⊇ sqrt(1+y_input^2).
+    if (y.min() <= T(0)) {
+        auto denom = affine_form<T>(y.context(), interval<T>(T(1), y.max()).sqrt());
+        return x / denom;
+    }
     return x / y.sqrt();
 }
 
@@ -353,13 +360,19 @@ inline interval<T> sqrtabs(interval<T> value)
 template<std::floating_point T>
 inline affine_form<T> sqrtabs(affine_form<T> value)
 {
-    return value.abs().sqrt();
+    auto lo = value.min(), hi = value.max();
+    if (lo >= T(0)) return value.sqrt();
+    if (hi <= T(0)) return (-value).sqrt();
+    // Zero-crossing: abs() overapproximates with negative min(), causing sqrt to throw.
+    // Use a fresh interval [0, max(|lo|, |hi|)] for the absolute value enclosure.
+    auto bound = std::fmax(-lo, hi);
+    return affine_form<T>(value.context(), interval<T>(T(0), bound)).sqrt();
 }
 
 template<std::floating_point T>
 inline affine_form<T> sqrtabs(affine_context<T> const& context, affine_form<T> value)
 {
-    return finalize(context, value.abs().sqrt());
+    return finalize(context, sqrtabs(std::move(value)));
 }
 
 // logabs(x) = log(|x|)

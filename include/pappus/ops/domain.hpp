@@ -5,9 +5,9 @@
 #include <concepts>
 #include <optional>
 
-#include "affine/affine.hpp"
-#include "fp/util.hpp"
-#include "interval/interval.hpp"
+#include "pappus/affine/affine.hpp"
+#include "pappus/fp/util.hpp"
+#include "pappus/interval/interval.hpp"
 
 // Domain predicates and non-throwing wrappers for affine_form operations.
 //

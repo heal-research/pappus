@@ -12,7 +12,7 @@
 #include <gch/small_vector.hpp>
 
 #include "context.hpp"
-#include "interval/interval.hpp"
+#include "pappus/interval/interval.hpp"
 
 #ifndef PROTECTED_DIVISION
 #define PROTECTED_DIVISION 1
@@ -40,8 +40,13 @@ public:
         , center_(iv.mid())
         , radius_(0)
     {
-        if (iv.radius() != T(0))
-            terms_.push_back({context().increment_last(), iv.radius()});
+        if (iv.inf() != iv.sup()) {
+            // Directed rounding guarantees to_interval() ⊇ iv regardless of
+            // which way center_ was rounded relative to the exact midpoint.
+            T r = std::fmax(fp::ropu<fp::op_sub>(center_, iv.inf()),
+                            fp::ropu<fp::op_sub>(iv.sup(), center_));
+            terms_.push_back({context().increment_last(), r});
+        }
         update_radius();
     }
 
@@ -72,8 +77,8 @@ public:
 
     T center() const { return center_; }
     T radius() const { return radius_; }
-    T max()    const { return center() + radius(); }
-    T min()    const { return center() - radius(); }
+    T max()    const { return fp::ropu<fp::op_add>(center(), radius()); }
+    T min()    const { return fp::ropd<fp::op_sub>(center(), radius()); }
 
     T abs_max() const
     {
@@ -122,7 +127,13 @@ public:
 
     interval<T> to_interval() const
     {
-        return interval<T>(min(), max());
+        // Directed rounding ensures the interval encloses the center ± radius
+        // sum.  Construction rounding (center/radius computed with
+        // round-to-nearest) can still leave this up to a few ULPs too narrow
+        // when |center| >> |lo|/|hi|; callers requiring strict soundness
+        // should widen the result proportionally to |center|.
+        return interval<T>(fp::ropd<fp::op_sub>(center_, radius_),
+                           fp::ropu<fp::op_add>(center_, radius_));
     }
 
     affine_form& operator=(T v)
@@ -275,7 +286,24 @@ public:
         } else {
             terms.push_back({context().increment_last(), delta - common_deviation});
         }
-        return affine_form(context(), c1 * c2 + common_center, std::move(terms));
+        auto result = affine_form(context(), c1 * c2 + common_center, std::move(terms));
+        // Self-multiplication: accumulated FP rounding errors in center and radius
+        // can leave result.sup() slightly below max()^2. Post-verify and patch.
+        if (this == &other && context().approximation_mode() != approximation_mode::SECANT) {
+            auto a = min(), b = max();
+            auto nhi = std::fmax(a * a, b * b);
+            auto nlo = (a <= T(0) && T(0) <= b) ? T(0) : std::fmin(a * a, b * b);
+            auto iv = result.to_interval();
+            if (iv.inf() > nlo || iv.sup() < nhi) {
+                T gap = std::fmax(iv.inf() > nlo ? iv.inf() - nlo : T(0),
+                                  iv.sup() < nhi ? nhi - iv.sup() : T(0));
+                result.terms_.back().value = std::nextafter(
+                    result.terms_.back().value + gap,
+                    std::numeric_limits<T>::infinity());
+                result.update_radius();
+            }
+        }
+        return result;
     }
 
     affine_form& operator*=(affine_form const& other)
@@ -359,10 +387,7 @@ public:
         }
         }
 
-        auto result_terms = terms_;
-        for (auto& t : result_terms) t.value *= alpha;
-        result_terms.push_back({context().increment_last(), delta});
-        return affine_form(context(), alpha * c + dzeta, std::move(result_terms));
+        return apply_unary_bounded(c, alpha, dzeta, delta, fa, fb);
     }
 
     affine_form pow(int exponent) const
@@ -374,7 +399,7 @@ public:
         if (exponent == -1) return this->inv();
 
         auto c = center(), r = radius();
-        auto a = c - r, b = c + r;
+        auto a = min(), b = max(); // sound bounds via directed rounding
         auto fa = std::pow(a, exponent), fb = std::pow(b, exponent);
 
         T alpha = T(0), delta, dzeta;
@@ -385,10 +410,19 @@ public:
             auto e  = std::fabs(alpha / exponent);
             auto x1 = -std::pow(e, T(1) / T(exponent - 1));
             auto x2 = -x1;
-            auto y1 = x1 < a ? fa - alpha * a : std::pow(x1, exponent) - alpha * x1;
-            auto y2 = x2 > b ? fb - alpha * b : std::pow(x2, exponent) - alpha * x2;
-            delta = (y1 - y2) * T(0.5);
-            dzeta = (y1 + y2) * T(0.5);
+            // Evaluate h(x) = f(x) - alpha*x at all candidate extrema
+            // (endpoints and interior critical points).  Including the
+            // endpoints is necessary when alpha ≈ 0 and both critical
+            // points collapse to x=0 (e.g. even power on a zero-crossing
+            // interval), where the endpoints carry the maximum deviation.
+            auto y_a = fa - alpha * a;
+            auto y_b = fb - alpha * b;
+            auto y1 = (x1 >= a) ? std::pow(x1, exponent) - alpha * x1 : y_a;
+            auto y2 = (x2 <= b) ? std::pow(x2, exponent) - alpha * x2 : y_b;
+            auto y_lo = std::fmin(std::fmin(y_a, y_b), std::fmin(y1, y2));
+            auto y_hi = std::fmax(std::fmax(y_a, y_b), std::fmax(y1, y2));
+            delta = (y_hi - y_lo) * T(0.5);
+            dzeta = (y_hi + y_lo) * T(0.5);
             break;
         }
         case approximation_mode::MINRANGE: {
@@ -473,11 +507,8 @@ public:
         }
         }
 
-        auto result_terms = terms_;
-        for (auto& t : result_terms) t.value *= beta;
-        if (gamma != T(0))
-            result_terms.push_back({context().increment_last(), gamma});
-        return affine_form(context(), beta * center() + alpha, std::move(result_terms));
+        // alpha is dzeta, beta is alpha, gamma is delta in apply_unary's naming.
+        return apply_unary_bounded(center(), beta, alpha, gamma, fMin, fMax);
     }
 
     affine_form pow(affine_form const& other) const
@@ -711,7 +742,7 @@ public:
             break;
         }
         }
-        return apply_unary(c, alpha, dzeta, delta);
+        return apply_unary_bounded(c, alpha, dzeta, delta, fa, fb);
     }
 
     affine_form log1p() const
@@ -750,7 +781,7 @@ public:
             dzeta = fa - alpha * a;
             delta = T(0);
         }
-        return apply_unary(c, alpha, dzeta, delta);
+        return apply_unary_bounded(c, alpha, dzeta, delta, fa, fb);
     }
 
     // floor/ceil are step functions — not differentiable. The best affine
@@ -777,7 +808,7 @@ public:
         g_min -= T(0);
         T delta = T(0.5) * (g_max - g_min);
         T dzeta = T(0.5) * (g_max + g_min);
-        return apply_unary(center(), alpha, dzeta, delta);
+        return apply_unary_bounded(center(), alpha, dzeta, delta, fa, fb);
     }
 
     affine_form ceil() const
@@ -795,7 +826,7 @@ public:
         g_min -= T(1);
         T delta = T(0.5) * (g_max - g_min);
         T dzeta = T(0.5) * (g_max + g_min);
-        return apply_unary(center(), alpha, dzeta, delta);
+        return apply_unary_bounded(center(), alpha, dzeta, delta, fa, fb);
     }
 
     affine_form sqrt() const
@@ -833,10 +864,7 @@ public:
         }
         }
 
-        auto result_terms = terms_;
-        for (auto& t : result_terms) t.value *= alpha;
-        result_terms.push_back({context().increment_last(), delta});
-        return affine_form(context(), center() * alpha + dzeta, std::move(result_terms));
+        return apply_unary_bounded(center(), alpha, dzeta, delta, fa, fb);
     }
 
     affine_form isqrt() const
@@ -877,10 +905,7 @@ public:
         }
         }
 
-        auto result_terms = terms_;
-        for (auto& t : result_terms) t.value *= alpha;
-        result_terms.push_back({context().increment_last(), delta});
-        return affine_form(context(), center() * alpha + dzeta, std::move(result_terms));
+        return apply_unary_bounded(center(), alpha, dzeta, delta, fa, fb);
     }
 
     // ---------------------------------------------------------------------------
@@ -915,7 +940,7 @@ public:
             alpha = r > limits<T>::minrad ? (fb - fa) / (b - a) : fa;
             dzeta = fa - alpha * a; delta = T(0);
         }
-        return apply_unary(c, alpha, dzeta, delta);
+        return apply_unary_bounded(c, alpha, dzeta, delta, fa, fb);
     }
 
     affine_form log() const
@@ -952,7 +977,7 @@ public:
             alpha = r > limits<T>::minrad ? (fb - fa) / (b - a) : T(1) / c;
             dzeta = fa - alpha * a; delta = T(0);
         }
-        return apply_unary(c, alpha, dzeta, delta);
+        return apply_unary_bounded(c, alpha, dzeta, delta, fa, fb);
     }
 
     affine_form sin() const
@@ -989,7 +1014,7 @@ public:
             delta = T(0.5) * (g_max - g_min);
             dzeta = T(0.5) * (g_max + g_min);
         }
-        return apply_unary(c, alpha, dzeta, delta);
+        return apply_unary_bounded(c, alpha, dzeta, delta, fa, fb);
     }
 
     affine_form cos() const
@@ -1027,7 +1052,7 @@ public:
             delta = T(0.5) * (g_max - g_min);
             dzeta = T(0.5) * (g_max + g_min);
         }
-        return apply_unary(c, alpha, dzeta, delta);
+        return apply_unary_bounded(c, alpha, dzeta, delta, fa, fb);
     }
 
     affine_form tan() const
@@ -1070,7 +1095,7 @@ public:
             delta = T(0.5) * (g_max - g_min);
             dzeta = T(0.5) * (g_max + g_min);
         }
-        return apply_unary(c, alpha, dzeta, delta);
+        return apply_unary_bounded(c, alpha, dzeta, delta, fa, fb);
     }
 
     affine_form sinh() const
@@ -1110,7 +1135,7 @@ public:
             alpha = r > limits<T>::minrad ? (fb - fa) / (b - a) : std::cosh(c);
             dzeta = fa - alpha * a; delta = T(0);
         }
-        return apply_unary(c, alpha, dzeta, delta);
+        return apply_unary_bounded(c, alpha, dzeta, delta, fa, fb);
     }
 
     affine_form cosh() const
@@ -1137,7 +1162,7 @@ public:
             alpha = r > limits<T>::minrad ? (fb - fa) / (b - a) : std::sinh(c);
             dzeta = fa - alpha * a; delta = T(0);
         }
-        return apply_unary(c, alpha, dzeta, delta);
+        return apply_unary_bounded(c, alpha, dzeta, delta, fa, fb);
     }
 
     affine_form tanh() const
@@ -1177,7 +1202,7 @@ public:
             alpha = r > limits<T>::minrad ? (fb - fa) / (b - a) : T(1) - fa * fa;
             dzeta = fa - alpha * a; delta = T(0);
         }
-        return apply_unary(c, alpha, dzeta, delta);
+        return apply_unary_bounded(c, alpha, dzeta, delta, fa, fb);
     }
 
     affine_form asin() const
@@ -1222,7 +1247,7 @@ public:
             alpha = r > limits<T>::minrad ? (fb - fa) / (b - a) : T(1) / std::sqrt(T(1) - c * c);
             dzeta = fa - alpha * a; delta = T(0);
         }
-        return apply_unary(c, alpha, dzeta, delta);
+        return apply_unary_bounded(c, alpha, dzeta, delta, fa, fb);
     }
 
     affine_form acos() const
@@ -1267,7 +1292,7 @@ public:
             alpha = r > limits<T>::minrad ? (fb - fa) / (b - a) : T(-1) / std::sqrt(T(1) - c * c);
             dzeta = fa - alpha * a; delta = T(0);
         }
-        return apply_unary(c, alpha, dzeta, delta);
+        return apply_unary_bounded(c, alpha, dzeta, delta, fa, fb);
     }
 
     affine_form atan() const
@@ -1306,7 +1331,7 @@ public:
             alpha = r > limits<T>::minrad ? (fb - fa) / (b - a) : T(1) / (T(1) + c * c);
             dzeta = fa - alpha * a; delta = T(0);
         }
-        return apply_unary(c, alpha, dzeta, delta);
+        return apply_unary_bounded(c, alpha, dzeta, delta, fa, fb);
     }
 
     // ---------------------------------------------------------------------------
@@ -1382,6 +1407,28 @@ private:
         update_radius();
     }
 
+    // Like apply_unary but guarantees to_interval() ⊇ [min(fa,fb), max(fa,fb)].
+    // Chebyshev/minrange coefficients are computed with round-to-nearest, which
+    // can leave the endpoint bound 1–3 ULPs tight due to associativity errors
+    // between alpha*c+dzeta-radius and alpha*a+dzeta.  A single post-call check
+    // of the actual to_interval() detects and corrects the shortfall.
+    affine_form apply_unary_bounded(T c, T alpha, T dzeta, T delta,
+                                    T fa, T fb) const
+    {
+        auto nlo = std::fmin(fa, fb), nhi = std::fmax(fa, fb);
+        auto result = apply_unary(c, alpha, dzeta, delta);
+        auto iv = result.to_interval();
+        bool lo_ok = iv.inf() <= nlo, hi_ok = iv.sup() >= nhi;
+        if (!lo_ok || !hi_ok) {
+            T gap = std::fmax(!lo_ok ? iv.inf() - nlo : T(0),
+                              !hi_ok ? nhi - iv.sup() : T(0));
+            delta = std::nextafter(delta + gap,
+                                   std::numeric_limits<T>::infinity());
+            result = apply_unary(c, alpha, dzeta, delta);
+        }
+        return result;
+    }
+
     affine_form apply_unary(T c, T alpha, T dzeta, T delta) const
     {
         auto result_terms = terms_;
@@ -1393,8 +1440,11 @@ private:
     void update_radius()
     {
         prune_zero_terms();
-        radius_ = std::transform_reduce(terms_.begin(), terms_.end(), T(0),
-            std::plus<T>{}, [](term const& t){ return std::fabs(t.value); });
+        // Sum absolute values with upward-directed rounding so the radius
+        // is a guaranteed over-estimate of the true L1 norm.
+        radius_ = T(0);
+        for (auto const& t : terms_)
+            radius_ = fp::ropu<fp::op_add>(radius_, std::fabs(t.value));
     }
 
     void prune_zero_terms()

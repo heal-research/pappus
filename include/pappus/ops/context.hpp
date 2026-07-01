@@ -4,7 +4,7 @@
 #include <concepts>
 #include <cstddef>
 
-#include "affine/context.hpp"
+#include "pappus/affine/context.hpp"
 
 namespace pappus::ops {
 

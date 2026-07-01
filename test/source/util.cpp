@@ -1,6 +1,6 @@
 #include <catch2/catch_all.hpp>
 
-#include "pappus.hpp"
+#include "pappus/pappus.hpp"
 
 TEST_CASE("ops layer")
 {

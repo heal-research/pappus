@@ -42,8 +42,6 @@
             src = self;
 
             cmakeFlags = [
-              "-DBUILD_TESTS=OFF"
-              "-DUSE_COREMATH=OFF"
               "-DCMAKE_BUILD_TYPE=Release"
             ];
 

@@ -4,8 +4,8 @@
 #include <concepts>
 
 #include "context.hpp"
-#include "affine/affine.hpp"
-#include "interval/interval.hpp"
+#include "pappus/affine/affine.hpp"
+#include "pappus/interval/interval.hpp"
 
 namespace pappus::ops {
 

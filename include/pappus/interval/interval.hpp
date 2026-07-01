@@ -13,9 +13,9 @@
 #include <eve/module/core.hpp>
 #include <eve/module/math.hpp>
 
-#include "fp/util.hpp"
-#include "fp/math.hpp"
-#include "util/contracts.hpp"
+#include "pappus/fp/util.hpp"
+#include "pappus/fp/math.hpp"
+#include "pappus/util/contracts.hpp"
 
 namespace pappus {
 
@@ -785,24 +785,45 @@ private:
 
     // Integer power rounded down/up via repeated squaring using op_mul.
     // Avoids std::pow(x,n) which uses exp(n*log(x)) and gives non-exact
-    // results under directed rounding even for small integer arguments.
+    // Integer power with directed rounding.
+    // For positive bases, exponentiation-by-squaring with ropd/ropu is sound.
+    // For negative bases with odd powers, the sign flip means we must compute
+    // the bound of |x|^p with the OPPOSITE rounding direction and negate.
     static T ipow_d(T x, int p)
     {
         if (p < 0) return fp::ropd<fp::op_div>(T(1), ipow_u(x, -p));
-        T r(1);
+        if (x < T(0) && (p & 1)) {
+            // x^p = -|x|^p, want lower bound => negate upper bound of |x|^p
+            T ax = -x, r(1);
+            for (int n = p; n > 0; n >>= 1) {
+                if (n & 1) r = fp::ropu<fp::op_mul>(r, ax);
+                if (n > 1) ax = fp::ropu<fp::op_mul>(ax, ax);
+            }
+            return -r;
+        }
+        T ax = std::fabs(x), r(1);
         for (int n = p; n > 0; n >>= 1) {
-            if (n & 1) r = fp::ropd<fp::op_mul>(r, x);
-            if (n > 1) x = fp::ropd<fp::op_mul>(x, x);
+            if (n & 1) r = fp::ropd<fp::op_mul>(r, ax);
+            if (n > 1) ax = fp::ropd<fp::op_mul>(ax, ax);
         }
         return r;
     }
     static T ipow_u(T x, int p)
     {
         if (p < 0) return fp::ropu<fp::op_div>(T(1), ipow_d(x, -p));
-        T r(1);
+        if (x < T(0) && (p & 1)) {
+            // x^p = -|x|^p, want upper bound => negate lower bound of |x|^p
+            T ax = -x, r(1);
+            for (int n = p; n > 0; n >>= 1) {
+                if (n & 1) r = fp::ropd<fp::op_mul>(r, ax);
+                if (n > 1) ax = fp::ropd<fp::op_mul>(ax, ax);
+            }
+            return -r;
+        }
+        T ax = std::fabs(x), r(1);
         for (int n = p; n > 0; n >>= 1) {
-            if (n & 1) r = fp::ropu<fp::op_mul>(r, x);
-            if (n > 1) x = fp::ropu<fp::op_mul>(x, x);
+            if (n & 1) r = fp::ropu<fp::op_mul>(r, ax);
+            if (n > 1) ax = fp::ropu<fp::op_mul>(ax, ax);
         }
         return r;
     }

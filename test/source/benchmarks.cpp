@@ -6,9 +6,9 @@
 #include <queue>
 #include <algorithm>
 
-#include "interval/interval.hpp"
-#include "interval/box.hpp"
-#include "pappus.hpp"
+#include "pappus/interval/interval.hpp"
+#include "pappus/interval/box.hpp"
+#include "pappus/pappus.hpp"
 
 namespace fp = pappus::fp;
 

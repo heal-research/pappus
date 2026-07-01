@@ -1,29 +1,59 @@
-cmake_minimum_required(VERSION 3.6)
+cmake_minimum_required(VERSION 3.14)
 
-include(FeatureSummary)
+include(cmake/prelude.cmake)
 
-project(pappus_proj
+project(
+    pappus
+    VERSION 0.1.0
+    DESCRIPTION "Interval and affine arithmetic library"
+    HOMEPAGE_URL "https://github.com/foolnotion/pappus"
     LANGUAGES CXX
-    )
+)
 
-include(CTest)
+include(cmake/project-is-top-level.cmake)
+include(cmake/variables.cmake)
 
-set(BUILD_TESTS_DESCRIPTION "Build unit tests.")
+# ---- Declare library ----
+
+find_package(small_vector REQUIRED)
+find_package(eve REQUIRED)
+
+add_library(pappus_pappus INTERFACE)
+add_library(pappus::pappus ALIAS pappus_pappus)
+
+set_property(TARGET pappus_pappus PROPERTY EXPORT_NAME pappus)
+
+target_include_directories(
+    pappus_pappus ${warning_guard}
+    INTERFACE
+    "\$<BUILD_INTERFACE:${PROJECT_SOURCE_DIR}/include>"
+)
+
+target_compile_features(pappus_pappus INTERFACE cxx_std_23)
+target_link_libraries(pappus_pappus INTERFACE gch::small_vector eve::eve)
+
 set(DIRECTED_ROUNDING_DESCRIPTION "Use directed rounding towards -inf or +inf for interval bounds.")
-
-option(BUILD_TESTS ${BUILD_TESTS_DESCRIPTION} ON)
 option(DIRECTED_ROUNDING ${DIRECTED_ROUNDING_DESCRIPTION} ON)
+target_compile_definitions(
+    pappus_pappus INTERFACE
+    "$<$<BOOL:${DIRECTED_ROUNDING}>:DIRECTED_ROUNDING>"
+)
 
-add_feature_info(BUILD_TESTS       BUILD_TESTS       ${BUILD_TESTS_DESCRIPTION})
-add_feature_info(DIRECTED_ROUNDING DIRECTED_ROUNDING ${DIRECTED_ROUNDING_DESCRIPTION})
+# ---- Install rules ----
 
-# print a status of what we found
-feature_summary(WHAT ENABLED_FEATURES DESCRIPTION "Enabled features:" QUIET_ON_EMPTY)
-feature_summary(WHAT DISABLED_FEATURES DESCRIPTION "Disabled features:" QUIET_ON_EMPTY)
-
-if(BUILD_TESTS)
-    enable_testing()
-    add_subdirectory(test)
+if(NOT CMAKE_SKIP_INSTALL_RULES)
+  include(cmake/install-rules.cmake)
 endif()
 
-add_subdirectory(src)
+# ---- Developer mode ----
+
+if(NOT pappus_DEVELOPER_MODE)
+  return()
+elseif(NOT PROJECT_IS_TOP_LEVEL)
+  message(
+      AUTHOR_WARNING
+      "Developer mode is intended for developers of pappus"
+  )
+endif()
+
+include(cmake/dev-mode.cmake)
