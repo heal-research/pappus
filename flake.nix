@@ -47,10 +47,11 @@
 
             nativeBuildInputs = with pkgs; [ cmake ];
 
-            buildInputs = with pkgs; [
+            # gch-small-vector and eve are used in pappus's public headers, so
+            # consumers (e.g. Operon) need them transitively via find_package(pappus)
+            propagatedBuildInputs = with pkgs; [
               gch-small-vector
               eve
-              openlibm
             ];
           };
 
@@ -70,7 +71,7 @@
               ]);
 
             buildInputs =
-              pappus.buildInputs
+              pappus.propagatedBuildInputs
               ++ (
                 with pkgs;
                 pkgs.lib.optionals pkgs.stdenv.isLinux [
