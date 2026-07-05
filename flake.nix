@@ -29,7 +29,12 @@
       ];
 
       perSystem =
-        { pkgs, system, inputs', ... }:
+        {
+          pkgs,
+          system,
+          inputs',
+          ...
+        }:
         let
           pkgs = import nixpkgs {
             inherit system;
@@ -77,7 +82,7 @@
                 pkgs.lib.optionals pkgs.stdenv.isLinux [
                   gdb
                   valgrind
-                  linuxPackages.perf
+                  perf
                 ]
               )
               ++ pkgs.lib.optionals enableTesting [
