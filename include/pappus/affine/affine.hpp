@@ -295,11 +295,16 @@ public:
             auto nlo = (a <= T(0) && T(0) <= b) ? T(0) : std::fmin(a * a, b * b);
             auto iv = result.to_interval();
             if (iv.inf() > nlo || iv.sup() < nhi) {
+                // Push a fresh term rather than bumping terms_.back(): the
+                // error term this block means to patch can itself have been
+                // pruned as an exact-zero by the ctor's update_radius() (its
+                // value, delta - common_deviation, rounds to 0 in float
+                // precision after a few chained self-multiplications) --
+                // terms_ can even be empty at this point, so back() is UB.
                 T gap = std::fmax(iv.inf() > nlo ? iv.inf() - nlo : T(0),
                                   iv.sup() < nhi ? nhi - iv.sup() : T(0));
-                result.terms_.back().value = std::nextafter(
-                    result.terms_.back().value + gap,
-                    std::numeric_limits<T>::infinity());
+                auto patch = std::nextafter(gap, std::numeric_limits<T>::infinity());
+                result.terms_.push_back({context().increment_last(), patch});
                 result.update_radius();
             }
         }
