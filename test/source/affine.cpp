@@ -39,6 +39,14 @@ bool operator==(af const& lhs, AAF const& rhs)
     return true;
 }
 
+// Domain errors return af::invalid() (NaN-centered) rather than throwing --
+// see affine.hpp's affine_form::invalid() for why.
+bool is_invalid(af const& x)
+{
+    auto iv = x.to_interval();
+    return !std::isfinite(iv.inf()) || !std::isfinite(iv.sup());
+}
+
 bool operator==(AAF const& lhs, af const& rhs)
 {
     return rhs == lhs;
@@ -265,8 +273,8 @@ TEST_CASE("affine_form::inv()")
 TEST_CASE("affine_form::inv() rejects intervals containing zero")
 {
     pappus::affine_context ctx;
-    CHECK_THROWS_AS(af(ctx, ai(-1.0, 1.0)).inv(), std::invalid_argument);
-    CHECK_THROWS_AS(af(ctx, 0.0).inv(), std::invalid_argument);
+    CHECK(is_invalid(af(ctx, ai(-1.0, 1.0)).inv()));
+    CHECK(is_invalid(af(ctx, 0.0).inv()));
 }
 
 TEST_CASE("affine_form::pow(int)")
@@ -310,8 +318,8 @@ TEST_CASE("affine_form::pow(double) domain checks")
 {
     pappus::affine_context ctx;
 
-    CHECK_THROWS_AS(af(ctx, ai(-1.0, 4.0)).pow(0.5), std::invalid_argument);
-    CHECK_THROWS_AS(af(ctx, ai(0.0, 4.0)).pow(-0.5), std::invalid_argument);
+    CHECK(is_invalid(af(ctx, ai(-1.0, 4.0)).pow(0.5)));
+    CHECK(is_invalid(af(ctx, ai(0.0, 4.0)).pow(-0.5)));
 }
 
 TEST_CASE("affine_form::last_index() on constant form")
@@ -491,8 +499,8 @@ TEST_CASE("affine_form::log()")
     CHECK(sound(y, [](double x) { return std::log(x); }, u));
     CHECK(y.to_interval().sup() >= std::log(4.0));
 
-    CHECK_THROWS_AS(af(ctx, ai(0.0, 1.0)).log(), std::invalid_argument);
-    CHECK_THROWS_AS(af(ctx, -1.0).log(),          std::invalid_argument);
+    CHECK(is_invalid(af(ctx, ai(0.0, 1.0)).log()));
+    CHECK(is_invalid(af(ctx, -1.0).log()));
 }
 
 TEST_CASE("affine_form::sin()")
@@ -554,7 +562,7 @@ TEST_CASE("affine_form::tan()")
     CHECK(sound(y, [](double x) { return std::tan(x); }, u));
 
     // Crosses asymptote at π/2
-    CHECK_THROWS_AS(af(ctx, ai(0.0, 2.0)).tan(), std::domain_error);
+    CHECK(is_invalid(af(ctx, ai(0.0, 2.0)).tan()));
 }
 
 TEST_CASE("affine_form::sinh()")
@@ -634,7 +642,7 @@ TEST_CASE("affine_form::asin()")
     auto y = x.asin();
     CHECK(sound(y, [](double x) { return std::asin(x); }, u));
 
-    CHECK_THROWS_AS(af(ctx, ai(-2.0, 0.0)).asin(), std::domain_error);
+    CHECK(is_invalid(af(ctx, ai(-2.0, 0.0)).asin()));
 }
 
 TEST_CASE("affine_form::acos()")
@@ -649,7 +657,7 @@ TEST_CASE("affine_form::acos()")
     auto y = x.acos();
     CHECK(sound(y, [](double x) { return std::acos(x); }, u));
 
-    CHECK_THROWS_AS(af(ctx, ai(0.0, 2.0)).acos(), std::domain_error);
+    CHECK(is_invalid(af(ctx, ai(0.0, 2.0)).acos()));
 }
 
 TEST_CASE("affine_form::atan()")

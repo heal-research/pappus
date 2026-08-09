@@ -60,6 +60,23 @@ public:
     affine_form(const affine_form& other) = default;
     affine_form(affine_form&& other)      = default;
 
+    // A NaN-centered, zero-radius, empty-terms sentinel for a data-dependent
+    // domain error (e.g. log of a non-positive range, sqrt of a negative
+    // one). Domain guards used to `throw` here, but throwing on every such
+    // case is expensive when it's the routine path (e.g. a random GP tree
+    // evaluated over a wide domain box hits these constantly, not
+    // exceptionally) -- measured at ~865ns/throw, up to ~85% of all
+    // TryAffineBound calls on some problems. NaN propagates through all
+    // downstream arithmetic automatically (NaN+x=NaN, NaN*x=NaN, and any
+    // comparison against NaN is false so domain guards downstream simply
+    // fall through rather than misfire), so callers only need to check
+    // to_interval()/isfinite() once at the end -- exactly the check
+    // TryAffineBound's non-finite-fallback path already performs.
+    static affine_form invalid(affine_context const& ctx)
+    {
+        return affine_form(ctx, std::numeric_limits<T>::quiet_NaN());
+    }
+
     void swap(affine_form& other)
     {
         std::swap(center_, other.center_);
@@ -344,14 +361,14 @@ public:
         // non-trivial interval that contains zero yields an unbounded inverse.
         if (terms_.empty()) {
             if (center_ == T(0))
-                throw std::invalid_argument("affine_form::inv: zero is not invertible");
+                return invalid(context());
             return affine_form(context(), T(1) / center_);
         }
 
         auto c = center(), r = radius();
         auto a = c - r, b = c + r;
         if (a <= T(0) && T(0) <= b)
-            throw std::invalid_argument("affine_form::inv: interval containing zero is not invertible");
+            return invalid(context());
         auto fa = T(1) / a, fb = T(1) / b;
 
         T alpha = 0, delta = 0, dzeta = 0;
@@ -468,9 +485,9 @@ public:
     {
         if (terms_.empty()) {
             if (center_ < T(0) && !(std::isfinite(exponent) && std::trunc(exponent) == exponent))
-                throw std::invalid_argument("affine_form::pow: fractional exponent requires nonnegative base");
+                return invalid(context());
             if (center_ == T(0) && exponent < T(0))
-                throw std::invalid_argument("affine_form::pow: negative exponent requires strictly positive base");
+                return invalid(context());
             return affine_form(context(), std::pow(center_, exponent));
         }
         if (exponent == T(1)) return *this;
@@ -479,9 +496,9 @@ public:
         auto is_integer_exponent = std::isfinite(exponent) && std::trunc(exponent) == exponent;
         if (min() < T(0))
             if (!is_integer_exponent)
-                throw std::invalid_argument("affine_form::pow: fractional exponent requires nonnegative base");
+                return invalid(context());
         if (exponent < T(0) && min() <= T(0))
-            throw std::invalid_argument("affine_form::pow: negative exponent requires strictly positive base");
+            return invalid(context());
 
         T alpha = T(0), beta = T(0), gamma = T(0);
         auto fMin = std::pow(min(), exponent);
@@ -520,7 +537,7 @@ public:
     {
         ensure_same_context(other);
         if (min() < T(0))
-            throw std::invalid_argument("affine_form::pow: exponentiation of negative base requires integer exponent");
+            return invalid(context());
 
         if (terms_.empty() && other.terms_.empty())
             return affine_form(context(), std::pow(center(), other.center()));
@@ -634,7 +651,7 @@ public:
             return affine_form(exponent.context(), T(1), std::move(result_terms));
         }
         if (base == T(0))
-            throw std::invalid_argument("affine_form::pow: base cannot be zero");
+            return invalid(exponent.context());
 
         T alpha = T(0), beta = T(0), gamma = T(0);
         auto fMin = std::pow(base, exponent.min());
@@ -754,12 +771,12 @@ public:
     {
         if (terms_.empty()) {
             if (center_ <= T(-1))
-                throw std::invalid_argument("affine_form::log1p: argument <= -1");
+                return invalid(context());
             return affine_form(context(), std::log1p(center_));
         }
         auto a = min(), b = max();
         if (a <= T(-1))
-            throw std::invalid_argument("affine_form::log1p: interval contains values <= -1");
+            return invalid(context());
         auto c = center(), r = radius();
         auto fa = std::log1p(a), fb = std::log1p(b);
         T alpha, dzeta, delta;
@@ -841,7 +858,7 @@ public:
 
         auto a = min(), b = max();
         if (a < T(0))
-            throw std::runtime_error("affine_form::sqrt: negative argument");
+            return invalid(context());
 
         auto fa = std::sqrt(a), fb = std::sqrt(b);
         T alpha, dzeta, delta;
@@ -879,7 +896,7 @@ public:
 
         auto a = min(), b = max();
         if (a < T(0) || b < T(0))
-            throw std::runtime_error("affine_form::isqrt: negative argument");
+            return invalid(context());
 
         auto fa = T(1) / std::sqrt(a), fb = T(1) / std::sqrt(b);
         T alpha, dzeta, delta;
@@ -952,12 +969,12 @@ public:
     {
         if (terms_.empty()) {
             if (center_ <= T(0))
-                throw std::invalid_argument("affine_form::log: non-positive argument");
+                return invalid(context());
             return affine_form(context(), std::log(center_));
         }
         auto a = min(), b = max();
         if (a <= T(0))
-            throw std::invalid_argument("affine_form::log: interval contains non-positive values");
+            return invalid(context());
         auto c = center(), r = radius();
         auto fa = std::log(a), fb = std::log(b);
         T alpha, dzeta, delta;
@@ -1071,7 +1088,7 @@ public:
             auto pi      = fp::pi_v<T>;
             if (static_cast<long>(std::floor((a + half_pi) / pi)) !=
                 static_cast<long>(std::floor((b + half_pi) / pi)))
-                throw std::domain_error("affine_form::tan: interval crosses an asymptote");
+                return invalid(context());
         }
         auto c = center(), r = radius();
         auto fa = std::tan(a), fb = std::tan(b);
@@ -1214,12 +1231,12 @@ public:
     {
         if (terms_.empty()) {
             if (center_ < T(-1) || center_ > T(1))
-                throw std::domain_error("affine_form::asin: argument out of [-1, 1]");
+                return invalid(context());
             return affine_form(context(), std::asin(center_));
         }
         auto a = min(), b = max();
         if (a < T(-1) || b > T(1))
-            throw std::domain_error("affine_form::asin: interval not contained in [-1, 1]");
+            return invalid(context());
         auto c = center(), r = radius();
         auto fa = std::asin(a), fb = std::asin(b);
         T alpha, dzeta, delta;
@@ -1259,12 +1276,12 @@ public:
     {
         if (terms_.empty()) {
             if (center_ < T(-1) || center_ > T(1))
-                throw std::domain_error("affine_form::acos: argument out of [-1, 1]");
+                return invalid(context());
             return affine_form(context(), std::acos(center_));
         }
         auto a = min(), b = max();
         if (a < T(-1) || b > T(1))
-            throw std::domain_error("affine_form::acos: interval not contained in [-1, 1]");
+            return invalid(context());
         auto c = center(), r = radius();
         auto fa = std::acos(a), fb = std::acos(b);
         T alpha, dzeta, delta;
