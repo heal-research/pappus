@@ -356,9 +356,10 @@ public:
     {
         // Note: unlike interval::inv() which returns [-inf, +inf] for an interval
         // strictly containing zero (and a half-infinite interval for one that
-        // touches zero), affine_form::inv() throws whenever [min, max] contains
-        // zero. Affine forms cannot represent unbounded values, and any
-        // non-trivial interval that contains zero yields an unbounded inverse.
+        // touches zero), affine_form::inv() returns invalid() (a NaN-poisoned
+        // form, see affine_form::invalid()) whenever [min, max] contains zero.
+        // Affine forms cannot represent unbounded values, and any non-trivial
+        // interval that contains zero yields an unbounded inverse.
         if (terms_.empty()) {
             if (center_ == T(0))
                 return invalid(context());
