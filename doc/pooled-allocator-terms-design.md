@@ -1,10 +1,15 @@
-# Pooled/arena allocator for `affine_form::terms_` — design (reviewed, not approved as scoped)
+# Pooled/arena allocator for `affine_form::terms_` — design (rejected as scoped)
 
-Status: **reviewed 2026-09-12 (GPT-5.6 Sol) — proceed with modifications,
-not with the original premise/design.** The original draft below overstated
-the performance problem and understated the implementation/safety cost;
-corrections and required next steps are in the "Review findings" section.
-Nothing implemented.
+Status: **reviewed 2026-09-12 (GPT-5.6 Sol, multi-round) — rejected as a
+near-term action; the original premise and every candidate design in this
+draft were incorrect or unsafe.** No version of a pooled/arena allocator
+on the public `affine_form::terms_t` type is safe without a redesign far
+larger than originally scoped (see "Final correction" in section 4). The
+only recommendation that survives review is measuring the existing
+inline-capacity (`16`) hit rate and tuning that constant if profiling
+shows it matters -- not building an allocator. Nothing implemented; kept
+in full below because the reasoning (why each successive candidate design
+failed) is the reusable part, same rationale as the Mixed IA/AA rejection.
 
 ## Original observation (contains errors -- see Review findings below)
 
@@ -183,28 +188,44 @@ term storage** (all N node forms are simultaneously live by the end of one
 *call overhead* by recycling a prior call's now-dead buffers into the next
 call, not by shrinking the working set of any single call.
 
-The safe, correctly-scoped version of this idea is therefore: a pool
-**owned by one `AffineEvaluator` instance** (not per-op, not per-context),
-reset/recycled at the *start* of each `Evaluate()` call -- mirroring
-`primal_.clear()`'s own reset point exactly, since that is precisely when
-every prior call's intermediate forms become dead simultaneously. This
-design's escape-safety holds for one specific reason worth stating
-explicitly: `Evaluate()` returns `primal_.back()` **by value** -- a real
-copy-construction out of a retained member, not a move -- so the returned
-root form always gets its own ordinary-allocator `terms_t` and never
-carries a pool-owned buffer past the call boundary. Any pool-backed
-allocator would need to apply only to `primal_`'s *internal* intermediate
-forms, never to the copy handed back to the caller.
+**Final correction -- the escape-safety rationale above is invalid.**
+`Evaluate()` returning `primal_.back()` "by value" does **not** make the
+returned copy switch to a default allocator. `gch::small_vector`'s copy
+constructor calls `select_on_container_copy_construction(other.allocator_ref())`
+(`gch/small_vector.hpp:1564-1566`, vector copy ctor `:5188-5194`); by
+default this returns the *same* allocator (same pool), not a
+detached/durable one. `affine_form`'s own copy constructor is defaulted
+(`affine.hpp:42-44`) and does nothing to change this. So a copy of a
+pool-backed root form **remains pool-backed** -- if the pool resets at the
+next `Evaluate()` call (or is scoped to the `AffineEvaluator` instance and
+that instance is reused, which `SetTree()` explicitly supports), the
+caller's retained copy of the previous call's result is a use-after-free.
+This applies to *every* external copy of a pool-backed form, not only the
+root.
 
-- Measure inline-capacity (`16`) hit rate before touching allocators at
-  all -- raising it may remove most heap allocations with zero lifetime
-  risk, at the cost of larger per-form objects (needs benchmarking, not
-  guessing).
-- If that's insufficient, the per-`AffineEvaluator`-instance pool above,
-  reset at the start of each `Evaluate()` call and never exposed to a
-  returned root value, is the least invasive allocator-adjacent option --
-  still requires the full plumbing/escape-contract work in points 2-3
-  above, just scoped correctly.
+**There is no version of a pooled/arena allocator on the public
+`affine_form::terms_t` type that is safe without one of two much larger
+changes:**
+
+1. A bespoke allocator whose `select_on_container_copy_construction`
+   explicitly detaches to durable (default) storage on copy-out -- an
+   unusual allocator-design problem in its own right, not a routine
+   parameterization.
+2. An entirely separate, non-public **scratch representation**, used only
+   for internal intermediate computation inside one `Evaluate()` call and
+   explicitly converted to an ordinary (default-allocator) `affine_form`
+   only at the point a result is returned or otherwise escapes -- a real
+   redesign of the evaluator's internal data model, not a lightweight
+   optimization.
+
+Neither is "the least invasive option." **The only recommendation that
+survives this review as a near-term, low-risk action is measuring the
+existing inline-capacity (`16`) hit rate and tuning that constant if
+profiling shows it matters.** Any pooled-allocator design is deferred
+indefinitely, pending someone independently deciding one of the two
+larger redesigns above is worth doing -- not pending "plumbing," which
+was this draft's original (incorrect) framing of the remaining work.
+
 
 
 ### 5. Required before any implementation
@@ -220,6 +241,25 @@ forms, never to the copy handed back to the caller.
    `Evaluate()` call, retain callback-supplied forms, move/swap/assign
    across contexts, concurrent independent evaluators) before considering
    any reset/reclamation scheme.
+4. **Compile probes against the exact vendored gch-small-vector 0.10.2
+   header** exercising every `affine_form` operation that touches
+   `terms_`'s allocator identity -- copy/move construction, assignment,
+   `swap()`, `pow`'s condensation path, unary-op term rebuilding, and
+   cross-context assignment -- before assuming "no deeper changes needed."
+   Specifically: `small_vector`'s copy constructor calls
+   `select_on_container_copy_construction`, while `affine_form`'s default
+   copy constructor and its copy-and-swap assignment (`affine.hpp:47-55,
+   146-151`) do not touch `context_` at all. If a custom allocator's
+   identity is tied to a specific arena/context, a defaulted `affine_form`
+   copy or assignment can silently leave a form's allocator and its
+   `context_` disagreeing. Avoiding that requires either (a) an allocator
+   that is itself shared/equal state (effectively a global or
+   per-process pool, which then needs its own deallocation-after-context,
+   synchronization, and retention rules -- not a simple per-evaluator
+   scratch), or (b) making `affine_form`'s copy/move/assignment/swap
+   allocator-aware explicitly, which is exactly the "invasive" work point
+   2 above says is not optional.
+
 
 Corrected next steps: fix the call-volume claim, prototype instrumentation
 without changing allocator semantics, benchmark inline-capacity tuning and
