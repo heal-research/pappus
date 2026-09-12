@@ -783,11 +783,11 @@ public:
         T alpha, dzeta, delta;
         switch (context().approximation_mode()) {
         case approximation_mode::CHEBYSHEV: {
-            // log1p is concave, same shape as log shifted by 1.
+            // log1p is concave. At x* = 1/alpha - 1,
+            // g(x*) = log1p(x*) - alpha*x* = alpha - 1 - log(alpha).
             alpha = r > limits<T>::minrad ? (fb - fa) / (b - a) : T(1) / (T(1) + c);
             auto ga = fa - alpha * a;
-            // tangent point: f'(x*) = alpha => 1/(1+x*) = alpha => x* = 1/alpha - 1
-            auto gx = -std::log(alpha) - T(1);
+            auto gx = alpha - T(1) - std::log(alpha);
             delta = T(0.5) * (gx - ga);    // concave: f above secant, gx > ga
             dzeta = T(0.5) * (gx + ga);
             break;

@@ -1030,3 +1030,19 @@ TEST_CASE("safe_log1p")
         CHECK_FALSE(pappus::safe_log1p(af(ctx, ai(-3.0, -1.0))).has_value());
     }
 }
+
+TEST_CASE("affine_form::log1p encloses its interior maximum residual")
+{
+    // On [0, 3], log1p's Chebyshev tangent point lies strictly inside the
+    // domain. Endpoint-only checks miss a misplaced tangent residual.
+    pappus::affine_context ctx;
+    ai const input{0.0, 3.0};
+    af const x{ctx, input};
+    auto const result = x.log1p().to_interval();
+
+    auto const alpha = std::log1p(input.sup()) / input.sup();
+    auto const critical = 1.0 / alpha - 1.0;
+    REQUIRE(critical > input.inf());
+    REQUIRE(critical < input.sup());
+    CHECK(result.contains(std::log1p(critical)));
+}
