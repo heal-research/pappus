@@ -1,6 +1,7 @@
 ﻿/build
 /thirdparty
 /.direnv
+/.claude
 /.envrc
 /.ycm_extra_conf.py
 /.clangd
