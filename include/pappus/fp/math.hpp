@@ -3,9 +3,21 @@
 
 // Directed-rounding primitives for sound interval arithmetic.
 //
-// Arithmetic ops use eve's `lower`/`upper` decorators: correctly-rounded
-// per-instruction rounding via the hardware MXCSR/FPCR save+restore. No
-// process-global state, safe to call from multiple threads concurrently.
+// Arithmetic ops use eve's `lower`/`upper` decorators. Neither of eve's
+// two implementation paths touches any hardware rounding-mode register
+// (no MXCSR/FPCR save+restore, contrary to what this comment used to
+// claim): on AVX-512 targets, the rounding direction is an immediate
+// operand baked directly into the SIMD instruction encoding (e.g.
+// `_mm512_add_round_pd(..., dir)`); on all other targets, eve computes
+// the round-to-nearest result plus its exact rounding error via an
+// error-free transform (Dekker/Knuth TwoSum for add/sub, an FMA-based
+// two-product for mul), then nudges the result by one ULP via
+// `eve::prev`/`eve::next` only when the error's sign requires it. Both
+// paths are ordinary, purely local floating-point computation on
+// register values — no process-global or thread-local state of any
+// kind, so there is no reordering hazard with unrelated (non-directed-
+// rounding) floating-point code in the same translation unit, and no
+// per-op register-write cost either.
 //
 // Transcendentals use eve's polynomial approximations (round-to-nearest)
 // followed by a 1-ULP outward expansion via eve::prev / eve::next. This
