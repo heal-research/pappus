@@ -161,3 +161,27 @@ TEST_CASE("condense", "[.]")
         });
     }
 }
+
+TEST_CASE("scalar vs SIMD interval bisection", "[.]")
+{
+    auto f = [](auto x) { return x * x - x; };
+    I const x0(-1, 1);
+
+    ankerl::nanobench::Bench bench;
+    bench.performanceCounters(true).warmup(5).epochIterations(1'000);
+
+    for (int depth : { 4, 8, 12 }) {
+        auto const n_leaves = 1 << depth;
+        I result;
+        bench.run("scalar n_leaves=" + std::to_string(n_leaves), [&]() {
+            auto r = I::empty();
+            for (int i = 0; i < n_leaves; ++i) {
+                r |= f(x0.segment(static_cast<std::size_t>(i), static_cast<std::size_t>(n_leaves)));
+            }
+            ankerl::nanobench::doNotOptimizeAway(result = r);
+        });
+        bench.run("SIMD   n_leaves=" + std::to_string(n_leaves), [&]() {
+            ankerl::nanobench::doNotOptimizeAway(result = pappus::batch_evaluate_ia(f, x0, n_leaves));
+        });
+    }
+}

@@ -183,7 +183,8 @@ public:
         return {left, right};
     }
 
-    subdivision<T> split(size_t n) const requires std::floating_point<T>;
+    template<typename U = T>
+    subdivision<U> split(size_t n) const requires std::floating_point<U>;
 
     // intersection — scalar only (SIMD branching on empty check is non-trivial)
     interval operator&(interval const other) const requires std::floating_point<T>
@@ -948,12 +949,12 @@ private:
     std::size_t const n_;
 };
 
-// split(n) definition — after subdivision<T> is complete
 template<typename T>
-subdivision<T> interval<T>::split(size_t n) const requires std::floating_point<T>
+template<typename U>
+subdivision<U> interval<T>::split(size_t n) const requires std::floating_point<U>
 {
     EXPECT(n > 0);
-    return subdivision<T>(*this, n);
+    return subdivision<U>(*this, n);
 }
 
 // ---------------------------------------------------------------------------
