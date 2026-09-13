@@ -201,27 +201,65 @@ public:
 
     affine_form& operator+=(T v)
     {
+        // center_ + v is computed with ordinary round-to-nearest; bound the
+        // rounding error against directed lo/hi and absorb it into a new
+        // noise term (same pattern as the interval-constructor above) so
+        // to_interval() still soundly encloses the true center_+v, not just
+        // whatever the RN result happened to round to.
+        auto lo = fp::ropd<fp::op_add>(center_, v);
+        auto hi = fp::ropu<fp::op_add>(center_, v);
         center_ += v;
+        auto slack = std::fmax(fp::ropu<fp::op_sub>(center_, lo), fp::ropu<fp::op_sub>(hi, center_));
+        if (slack > T(0)) { terms_.push_back({context().increment_last(), slack}); }
+        update_radius();
         return *this;
     }
 
     affine_form& operator-=(T v)
     {
-        center_ -= v;
-        return *this;
+        return *this += (-v);
     }
 
     affine_form& operator*=(T v)
     {
-        for (auto& t : terms_) t.value *= v;
-        center_ *= v;
-        radius_ *= std::fabs(v);
+        auto av = std::fabs(v);
+        // Exact error-free transform (Dekker/TwoProduct via FMA): for any
+        // finite a, b, a*b = fl(a*b) + fma(a, b, -fl(a*b)) EXACTLY in real
+        // arithmetic. This tracks the true rounding error of each multiply
+        // -- zero when the multiply happens to be exact (e.g. v == -1 or
+        // any other power of two), unlike an eps-proportional upper bound,
+        // which would add spurious nonzero slack even to exact multiplies
+        // (verified: broke abs()'s exactly-zero-at-boundary case via
+        // operator-()'s `*= -1`, which then wrongly tripped sqrt()'s `a<0`
+        // domain guard on a value that should have been exactly 0).
+        T errSum = T(0);
+        for (auto& t : terms_) {
+            auto scaled = t.value * v;
+            auto err = std::fma(t.value, v, -scaled);
+            errSum = fp::ropu<fp::op_add>(errSum, std::fabs(err));
+            t.value = scaled;
+        }
+        auto centerScaled = center_ * v;
+        auto centerErr = std::fma(center_, v, -centerScaled);
+        center_ = centerScaled;
+        radius_ = fp::ropu<fp::op_mul>(radius_, av);
+        auto slack = fp::ropu<fp::op_add>(errSum, std::fabs(centerErr));
+        if (slack > T(0)) { terms_.push_back({context().increment_last(), slack}); }
+        update_radius();
         return *this;
     }
 
     affine_form& operator/=(T v)
     {
-        return operator*=(T(1) / v);
+        operator*=(T(1) / v);
+        // RN(1/v) differs from the true 1/v by up to ~eps relative error,
+        // which operator*=(T)'s own (exact, fma-based) tracking cannot see
+        // -- it only accounts for the multiplication itself, not this
+        // pre-existing inaccuracy in the multiplier. Bound it with one
+        // small proportional slack term sized off the post-scale result.
+        auto extra = fp::ropu<fp::op_mul>(limits<T>::eps, fp::ropu<fp::op_add>(radius_, std::fabs(center_)));
+        if (extra > T(0)) { terms_.push_back({context().increment_last(), extra}); update_radius(); }
+        return *this;
     }
 
     affine_form operator-() const
@@ -273,7 +311,7 @@ public:
     {
         ensure_same_context(other);
         if (terms_.empty() && other.terms_.empty())
-            return affine_form(context(), center_ * other.center_);
+            return scalar_result<fp::op_mul>(center_, other.center_);
         if (terms_.empty()) return other * center_;
         if (other.terms_.empty()) return *this * other.center_;
 
@@ -363,7 +401,7 @@ public:
         if (terms_.empty()) {
             if (center_ == T(0))
                 return invalid(context());
-            return affine_form(context(), T(1) / center_);
+            return scalar_result<fp::op_div>(T(1), center_);
         }
 
         auto c = center(), r = radius();
@@ -416,13 +454,25 @@ public:
     affine_form pow(int exponent) const
     {
         if (terms_.empty())
-            return affine_form(context(), std::pow(center(), exponent));
+            return widen_scalar_result(std::pow(center(), exponent));
         if (exponent == 0) return affine_form(context(), T(1));
         if (exponent == 1) return *this;
         if (exponent == -1) return this->inv();
 
         auto c = center(), r = radius();
         auto a = min(), b = max(); // sound bounds via directed rounding
+
+        // Negative exponent with a domain touching/crossing zero is
+        // unbounded or undefined (e.g. x^-2 on [-1,1] is unbounded at the
+        // interior point x=0, even though pow(a,exponent)/pow(b,exponent)
+        // at the endpoints alone are both finite) -- mirrors pow(T)'s
+        // guard below. A purely negative domain (e.g. [-2,-1]^-3) never
+        // reaches zero and is well-defined; only reject when the domain
+        // actually touches/crosses zero. This overload was previously
+        // missing any guard at all, silently returning a finite (wrong)
+        // enclosure for the true zero-crossing case.
+        if (exponent < 0 && a <= T(0) && b >= T(0)) return invalid(context());
+
         auto fa = std::pow(a, exponent), fb = std::pow(b, exponent);
 
         T alpha = T(0), delta, dzeta;
@@ -476,10 +526,11 @@ public:
         }
         }
 
-        auto result_terms = terms_;
-        for (auto& t : result_terms) t.value *= alpha;
-        result_terms.push_back({context().increment_last(), delta});
-        return affine_form(context(), alpha * c + dzeta, std::move(result_terms));
+        // Route through the same self-correcting endpoint check every other
+        // unary op uses (this overload previously built its result by hand
+        // with no defense against RN-computed fa/fb/critical-point
+        // shortfall at all).
+        return apply_unary_bounded(c, alpha, dzeta, delta, fa, fb);
     }
 
     affine_form pow(T exponent) const
@@ -489,7 +540,7 @@ public:
                 return invalid(context());
             if (center_ == T(0) && exponent < T(0))
                 return invalid(context());
-            return affine_form(context(), std::pow(center_, exponent));
+            return widen_scalar_result(std::pow(center_, exponent));
         }
         if (exponent == T(1)) return *this;
         if (exponent == T(0)) return affine_form(context(), T(1));
@@ -498,7 +549,12 @@ public:
         if (min() < T(0))
             if (!is_integer_exponent)
                 return invalid(context());
-        if (exponent < T(0) && min() <= T(0))
+        // Only an actual zero-touching/crossing domain is unbounded or
+        // undefined for a negative exponent -- a purely negative domain
+        // (e.g. [-2,-1]^-3) is perfectly well-defined and must not be
+        // rejected just because min() <= 0 (this used to reject every
+        // negative-min domain regardless of whether it ever reached zero).
+        if (exponent < T(0) && min() <= T(0) && max() >= T(0))
             return invalid(context());
 
         T alpha = T(0), beta = T(0), gamma = T(0);
@@ -541,7 +597,7 @@ public:
             return invalid(context());
 
         if (terms_.empty() && other.terms_.empty())
-            return affine_form(context(), std::pow(center(), other.center()));
+            return widen_scalar_result(std::pow(center(), other.center()));
         if (terms_.empty()) return pow(center(), other);
         if (other.terms_.empty()) return this->pow(other.center());
 
@@ -645,7 +701,7 @@ public:
     static affine_form pow(T base, affine_form const& exponent)
     {
         if (exponent.terms_.empty())
-            return affine_form(exponent.context(), std::pow(base, exponent.center()));
+            return exponent.widen_scalar_result(std::pow(base, exponent.center()));
         if (base == T(1)) {
             auto result_terms = exponent.terms_;
             result_terms.push_back({exponent.context().increment_last(), T(0)});
@@ -723,7 +779,7 @@ public:
     affine_form cbrt() const
     {
         if (terms_.empty())
-            return affine_form(context(), std::cbrt(center()));
+            return scalar_result<fp::op_cbrt>(center());
 
         auto a = min(), b = max();
         auto c = center(), r = radius();
@@ -773,7 +829,7 @@ public:
         if (terms_.empty()) {
             if (center_ <= T(-1))
                 return invalid(context());
-            return affine_form(context(), std::log1p(center_));
+            return scalar_result<fp::op_log1p>(center_);
         }
         auto a = min(), b = max();
         if (a <= T(-1))
@@ -855,7 +911,7 @@ public:
     affine_form sqrt() const
     {
         if (terms_.empty())
-            return affine_form(context(), std::sqrt(center()));
+            return scalar_result<fp::op_sqrt>(center());
 
         auto a = min(), b = max();
         if (a < T(0))
@@ -893,7 +949,7 @@ public:
     affine_form isqrt() const
     {
         if (terms_.empty())
-            return affine_form(context(), T(1) / std::sqrt(center()));
+            return widen_scalar_result(T(1) / std::sqrt(center()));
 
         auto a = min(), b = max();
         if (a < T(0) || b < T(0))
@@ -938,7 +994,7 @@ public:
     affine_form exp() const
     {
         if (terms_.empty())
-            return affine_form(context(), std::exp(center_));
+            return scalar_result<fp::op_exp>(center_);
         auto c = center(), r = radius(), a = c - r, b = c + r;
         auto fa = std::exp(a), fb = std::exp(b);
         T alpha, dzeta, delta;
@@ -971,7 +1027,7 @@ public:
         if (terms_.empty()) {
             if (center_ <= T(0))
                 return invalid(context());
-            return affine_form(context(), std::log(center_));
+            return scalar_result<fp::op_log>(center_);
         }
         auto a = min(), b = max();
         if (a <= T(0))
@@ -1006,7 +1062,7 @@ public:
     affine_form sin() const
     {
         if (terms_.empty())
-            return affine_form(context(), std::sin(center_));
+            return scalar_result<fp::op_sin>(center_);
         auto c = center(), r = radius(), a = c - r, b = c + r;
         if (b - a >= fp::two_pi_v<T>)
             return affine_form(context(), interval<T>(T(-1), T(1)));
@@ -1043,7 +1099,7 @@ public:
     affine_form cos() const
     {
         if (terms_.empty())
-            return affine_form(context(), std::cos(center_));
+            return scalar_result<fp::op_cos>(center_);
         auto c = center(), r = radius(), a = c - r, b = c + r;
         if (b - a >= fp::two_pi_v<T>)
             return affine_form(context(), interval<T>(T(-1), T(1)));
@@ -1081,16 +1137,15 @@ public:
     affine_form tan() const
     {
         if (terms_.empty())
-            return affine_form(context(), std::tan(center_));
+            return scalar_result<fp::op_tan>(center_);
         auto a = min(), b = max();
-        // Reject if [a,b] contains an asymptote (k + 1/2)π
-        {
-            auto half_pi = fp::half_pi_v<T>;
-            auto pi      = fp::pi_v<T>;
-            if (static_cast<long>(std::floor((a + half_pi) / pi)) !=
-                static_cast<long>(std::floor((b + half_pi) / pi)))
-                return invalid(context());
-        }
+        // Reject if [a,b] contains an asymptote (k + 1/2)pi. See
+        // pappus::fp::trig::has_tan_pole's doc comment -- shared with
+        // interval<T>::tan() and ops::tan_domain_ok, replacing what were
+        // three independently-maintained (and, for interval<T>::tan()'s,
+        // demonstrably buggy) copies of this check.
+        if (fp::trig::has_tan_pole(a, b))
+            return invalid(context());
         auto c = center(), r = radius();
         auto fa = std::tan(a), fb = std::tan(b);
         T alpha, dzeta, delta;
@@ -1124,7 +1179,7 @@ public:
     affine_form sinh() const
     {
         if (terms_.empty())
-            return affine_form(context(), std::sinh(center_));
+            return scalar_result<fp::op_sinh>(center_);
         auto c = center(), r = radius(), a = c - r, b = c + r;
         auto fa = std::sinh(a), fb = std::sinh(b);
         T alpha, dzeta, delta;
@@ -1164,7 +1219,7 @@ public:
     affine_form cosh() const
     {
         if (terms_.empty())
-            return affine_form(context(), std::cosh(center_));
+            return scalar_result<fp::op_cosh>(center_);
         auto c = center(), r = radius(), a = c - r, b = c + r;
         auto fa = std::cosh(a), fb = std::cosh(b);
         T alpha, dzeta, delta;
@@ -1191,7 +1246,7 @@ public:
     affine_form tanh() const
     {
         if (terms_.empty())
-            return affine_form(context(), std::tanh(center_));
+            return scalar_result<fp::op_tanh>(center_);
         auto c = center(), r = radius(), a = c - r, b = c + r;
         auto fa = std::tanh(a), fb = std::tanh(b);
         T alpha, dzeta, delta;
@@ -1233,7 +1288,7 @@ public:
         if (terms_.empty()) {
             if (center_ < T(-1) || center_ > T(1))
                 return invalid(context());
-            return affine_form(context(), std::asin(center_));
+            return scalar_result<fp::op_asin>(center_);
         }
         auto a = min(), b = max();
         if (a < T(-1) || b > T(1))
@@ -1278,7 +1333,7 @@ public:
         if (terms_.empty()) {
             if (center_ < T(-1) || center_ > T(1))
                 return invalid(context());
-            return affine_form(context(), std::acos(center_));
+            return scalar_result<fp::op_acos>(center_);
         }
         auto a = min(), b = max();
         if (a < T(-1) || b > T(1))
@@ -1321,7 +1376,7 @@ public:
     affine_form atan() const
     {
         if (terms_.empty())
-            return affine_form(context(), std::atan(center_));
+            return scalar_result<fp::op_atan>(center_);
         auto c = center(), r = radius(), a = c - r, b = c + r;
         auto fa = std::atan(a), fb = std::atan(b);
         T alpha, dzeta, delta;
@@ -1379,8 +1434,15 @@ public:
         std::nth_element(terms_.begin(), terms_.begin() + n_merge, terms_.end(),
             [](term const& a, term const& b){ return std::fabs(a.value) < std::fabs(b.value); });
 
-        T error_sum = std::transform_reduce(terms_.begin(), terms_.begin() + n_merge,
-            T(0), std::plus<T>{}, [](term const& t){ return std::fabs(t.value); });
+        // Directed (outward) accumulation -- matches update_radius()'s own
+        // pattern -- so the merged error term is a guaranteed upper bound
+        // on the true sum of removed magnitudes, not just their RN sum
+        // (which can understate the true total after enough independent
+        // roundings, e.g. under a finite max_terms budget over many calls).
+        T error_sum = T(0);
+        for (auto it = terms_.begin(); it != terms_.begin() + n_merge; ++it) {
+            error_sum = fp::ropu<fp::op_add>(error_sum, std::fabs(it->value));
+        }
 
         terms_.erase(terms_.begin(), terms_.begin() + n_merge);
 
@@ -1430,15 +1492,46 @@ private:
         update_radius();
     }
 
+    // Wraps a scalar computed by a *tagged* directed-rounding operation
+    // (ropd/ropu<OP>) into a sound affine form via the existing
+    // interval-constructor above -- which already pushes zero terms when
+    // lo==hi exactly, so an exact scalar operation costs nothing extra.
+    // Fixes the "constant fast path" gap: a degenerate (terms_.empty())
+    // affine form has zero radius, so a plain std::foo(center_) point
+    // value previously bypassed apply_unary/apply_unary_bounded's margin
+    // entirely -- to_interval() would return that RN value as an exact
+    // point even when it under/overestimates the true mathematical value
+    // by rounding error.
+    template<typename OP, typename... Args>
+    affine_form scalar_result(Args... args) const
+    {
+        return affine_form(context(), interval<T>(fp::ropd<OP>(args...), fp::ropu<OP>(args...)));
+    }
+
+    // Same purpose as scalar_result, for operations with no tagged
+    // ropd/ropu<OP> (general pow, isqrt): widen an already RN-computed
+    // value by 1 ULP each direction instead of recomputing it twice with
+    // directed rounding.
+    affine_form widen_scalar_result(T v) const
+    {
+        return affine_form(context(), interval<T>(fp::widen_lo(v), fp::widen_hi(v)));
+    }
+
     // Like apply_unary but guarantees to_interval() ⊇ [min(fa,fb), max(fa,fb)].
     // Chebyshev/minrange coefficients are computed with round-to-nearest, which
     // can leave the endpoint bound 1–3 ULPs tight due to associativity errors
     // between alpha*c+dzeta-radius and alpha*a+dzeta.  A single post-call check
     // of the actual to_interval() detects and corrects the shortfall.
+    //
+    // fa/fb themselves are also computed by every caller via a plain
+    // (round-to-nearest) library call, not a directed one -- widen them
+    // outward by 1 ULP first (fp::widen_lo/widen_hi) so this check closes
+    // that gap too, not just the affine algebra's own associativity error.
     affine_form apply_unary_bounded(T c, T alpha, T dzeta, T delta,
                                     T fa, T fb) const
     {
-        auto nlo = std::fmin(fa, fb), nhi = std::fmax(fa, fb);
+        auto nlo = fp::widen_lo(std::fmin(fa, fb));
+        auto nhi = fp::widen_hi(std::fmax(fa, fb));
         auto result = apply_unary(c, alpha, dzeta, delta);
         auto iv = result.to_interval();
         bool lo_ok = iv.inf() <= nlo, hi_ok = iv.sup() >= nhi;
@@ -1456,7 +1549,21 @@ private:
     {
         auto result_terms = terms_;
         for (auto& t : result_terms) t.value *= alpha;
-        result_terms.push_back({context().increment_last(), delta});
+        // delta/dzeta are derived by each caller (exp/log/sin/.../pow) from
+        // several plain (round-to-nearest) evaluations of the target
+        // function and its critical points -- not directed-rounding-safe
+        // end-to-end, and apply_unary_bounded's endpoint check above only
+        // catches a shortfall against fa/fb, not one hiding in an interior
+        // critical-point computation. Add one small, deliberately
+        // conservative margin here, proportional to the enclosure's own
+        // scale, so every caller through this shared chokepoint is covered
+        // uniformly rather than re-deriving a tight directed-rounding bound
+        // independently for ~10 different transcendental approximations.
+        auto scale = std::fmax(std::fabs(dzeta), std::fabs(alpha) * (std::fabs(c) + radius()));
+        scale = std::fmax(scale, std::fabs(delta));
+        auto margin = fp::ropu<fp::op_mul>(T(8) * limits<T>::eps, scale);
+        auto widened_delta = fp::ropu<fp::op_add>(std::fabs(delta), margin);
+        result_terms.push_back({context().increment_last(), widened_delta});
         return affine_form(context(), alpha * c + dzeta, std::move(result_terms));
     }
 

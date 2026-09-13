@@ -484,10 +484,11 @@ public:
         if (diameter() > fp::pi_v<T>) return interval::infinite();
 
         auto [a, b] = bounds();
-        auto x = fp::trig::get_quadrant(a);
-        auto y = fp::trig::get_quadrant(b);
-
-        if (x % 2 <= y % 2 && x < y) return interval::infinite();
+        // See pappus::fp::trig::has_tan_pole's doc comment: replaces a
+        // quadrant-comparison test that was demonstrably wrong for e.g.
+        // [pi/2, pi] (treated as pole-free; tan is actually unbounded
+        // immediately to the right of pi/2 there).
+        if (fp::trig::has_tan_pole(a, b)) return interval::infinite();
         return interval(fp::ropd<fp::op_tan>(a), fp::ropu<fp::op_tan>(b));
     }
 
@@ -590,7 +591,13 @@ public:
     interval pow(T p) const requires std::floating_point<T>
     {
         if (is_empty()) return interval::empty();
-        if (std::fmod(p, T(1)) == T(0)) return this->pow(static_cast<int>(p));
+        // Casting an out-of-int-range integral p to int is implementation-
+        // defined/UB territory; fall through to the general real-power path
+        // instead for such p (extreme in practice, but a public API must
+        // not invoke UB on any finite input).
+        if (std::fmod(p, T(1)) == T(0)
+            && std::fabs(p) <= T(std::numeric_limits<int>::max()))
+            return this->pow(static_cast<int>(p));
         if (is_zero()) return p > T(0) ? interval::zero() : interval::empty();
         if (p == T(0.5)) return this->sqrt();
         return (p * this->log()).exp();

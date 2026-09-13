@@ -212,6 +212,18 @@ T ropu(T first, Args... rest)
 #endif
 }
 
+// Public 1-ULP outward-widening primitives, for callers (e.g. affine_form's
+// unary-op approximations) that need to guard a plain round-to-nearest
+// value against its own rounding error without going through a specific
+// tagged ropd/ropu operation. Thin, intentional aliases over the detail
+// helpers ropd/ropu already use internally for transcendentals -- exposed
+// here so call sites don't reach into `detail::`.
+template<typename T>
+T widen_lo(T x) { return detail::outward_lo(x); }
+
+template<typename T>
+T widen_hi(T x) { return detail::outward_hi(x); }
+
 namespace trig {
     template<std::floating_point T>
     int get_quadrant(T a)
@@ -220,6 +232,46 @@ namespace trig {
         if (x == T(0)) return 0;
         if (x < T(0)) x += two_pi_v<T>;
         return static_cast<int>(x / half_pi_v<T>);
+    }
+
+    // True iff the closed interval [a, b] (a <= b) contains a tangent
+    // asymptote, i.e. a point of the form (k + 1/2)*pi for some integer k.
+    // Touching a boundary counts as containing it (tan is undefined
+    // there) -- the standard sound-interval-arithmetic convention of
+    // treating a domain-boundary singularity as unsafe to exclude.
+    //
+    // Derivation: k0 is the smallest integer with (k0 + 1/2)*pi >= a; a
+    // pole lies in [a, b] iff that nearest-from-above pole is <= b. This
+    // replaces what were two independent, inconsistent, and (for the
+    // quadrant-comparison one) demonstrably buggy tests -- interval<T>::tan()
+    // used to compare get_quadrant(a) against get_quadrant(b) directly
+    // (wrong for e.g. [pi/2, pi], which it treated as pole-free) while
+    // affine_form<T>::tan()/tan_domain_ok used a separate floor-based test.
+    // All three now share this one derivation.
+    //
+    // Precision caveat: pi_v<T> is itself a rounded constant, so for |a|,
+    // |b| many periods from the origin, k0*pi drifts from the true
+    // multiple of pi the same way std::fmod/std::floor-based reduction
+    // does elsewhere in this file. Not a regression introduced by this
+    // predicate -- an accepted, pre-existing limitation of doing periodic-
+    // domain reduction without extended-precision pi.
+    template<std::floating_point T>
+    bool has_tan_pole(T a, T b)
+    {
+        // Non-finite bounds, or a finite `a`/`b` so large that k0*pi
+        // overflows: cannot safely rule out a pole in either case (an
+        // overflowed/non-finite `pole` compared via `<=` can spuriously
+        // read as "false", i.e. "no pole", when the domain is actually
+        // far too wide/extreme to say either way). Default to
+        // conservative true -- a false "contains a pole" only costs
+        // tightness (the caller rejects/treats as unbounded); a false
+        // "no pole" would be a real soundness break.
+        if (!std::isfinite(a) || !std::isfinite(b)) { return true; }
+        auto const pi = pi_v<T>, half_pi = half_pi_v<T>;
+        auto k0 = std::ceil(a / pi - T(0.5));
+        auto pole = k0 * pi + half_pi;
+        if (!std::isfinite(pole)) { return true; }
+        return pole <= b;
     }
 }
 

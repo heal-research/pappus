@@ -59,9 +59,7 @@ template<std::floating_point T>
 bool tan_domain_ok(interval<T> const& iv) noexcept
 {
     if (iv.is_empty()) return false;
-    auto hp = fp::half_pi_v<T>, pi = fp::pi_v<T>;
-    return static_cast<long>(std::floor((iv.inf() + hp) / pi))
-        == static_cast<long>(std::floor((iv.sup() + hp) / pi));
+    return !fp::trig::has_tan_pole(iv.inf(), iv.sup());
 }
 
 template<std::floating_point T>
@@ -82,7 +80,12 @@ bool pow_domain_ok(interval<T> const& iv, T exponent) noexcept
     if (iv.is_empty()) return false;
     bool is_int = std::isfinite(exponent) && std::trunc(exponent) == exponent;
     if (!is_int && iv.inf() < T(0)) return false;
-    if (exponent < T(0) && iv.inf() <= T(0)) return false;
+    // Only an actual zero-touching/crossing domain is unbounded/undefined
+    // for a negative exponent -- a purely negative domain (e.g. [-2,-1]
+    // with exponent -3) is well-defined and must not be rejected just
+    // because inf() <= 0 (matches affine_form::pow(T)/pow(int)'s corrected
+    // guard; this predicate had the same over-rejection bug independently).
+    if (exponent < T(0) && iv.inf() <= T(0) && iv.sup() >= T(0)) return false;
     return true;
 }
 

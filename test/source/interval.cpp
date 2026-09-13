@@ -437,3 +437,33 @@ TEST_CASE("power functions", "[IA]")
         CHECK(I(-3,4).pow(0.5) == I(-3,4).pow(1/2.));
     }
 }
+
+TEST_CASE("interval::tan() regression: pole at the domain's own lower edge")
+{
+    // The old quadrant-comparison guard (get_quadrant(a) vs get_quadrant(b))
+    // treated [pi/2, pi] as pole-free -- tan is actually unbounded
+    // immediately to the right of pi/2, and pi/2 itself is undefined.
+    // fp::trig::has_tan_pole replaces it; this is the concrete case that
+    // exposed the old bug.
+    auto const half_pi = fp::half_pi_v<double>;
+    auto const pi = fp::pi_v<double>;
+    CHECK(I(half_pi, pi).tan() == F);
+    // Same failure mode one period later.
+    CHECK(I(half_pi + fp::two_pi_v<double>, pi + fp::two_pi_v<double>).tan() == F);
+    // A domain comfortably inside one branch (no pole touched at all)
+    // must still return a normal finite bound.
+    CHECK(I(0.0, 1.0).tan() != F);
+}
+
+TEST_CASE("interval::pow(double) does not invoke UB for a huge integral exponent")
+{
+    // std::fmod(p, 1) == 0 for p far outside int's range used to be cast
+    // directly via static_cast<int>(p) -- implementation-defined/UB. This
+    // just needs to not crash/misbehave and to fall through to the general
+    // real-power path instead.
+    auto const huge = std::ldexp(1.0, 40); // integral, far outside int range
+    auto const result = I(2.0, 3.0).pow(huge);
+    CHECK(std::isfinite(result.inf()));
+    CHECK((result.sup() == fp::inf || std::isfinite(result.sup())));
+}
+

@@ -52,6 +52,22 @@ bool operator==(AAF const& lhs, af const& rhs)
     return rhs == lhs;
 }
 
+// pappus deliberately widens its unary-op bounds by a small (a few ULP)
+// safety margin to guarantee soundness against RN-computed endpoint/
+// critical-point approximations (see affine_form::apply_unary's doc
+// comment) -- aaflib carries no equivalent margin, so pappus's bound is
+// expected to be a (very slightly) wider superset of aaflib's, not
+// bit-identical to it. The right cross-check for those cases is
+// containment, not equality; `slop` absorbs aaflib's own last-bit
+// rounding, not pappus's deliberate margin (which is allowed to be
+// arbitrarily larger on either side).
+bool SoundlyContains(ai const& bound, AAInterval const& ref)
+{
+    auto slop = eps * 32.0 * std::max({1.0, std::fabs(ref.getlo()), std::fabs(ref.gethi())});
+    return bound.inf() <= ref.getlo() + slop && ref.gethi() - slop <= bound.sup();
+}
+
+
 TEST_CASE("affine_form::operator+(af)")
 {
     // pappus
@@ -289,7 +305,7 @@ TEST_CASE("affine_form::pow(int)")
     AAF x2(u2);
     AAF y2 = x2 ^ exponent;
 
-    CHECK(y1.to_interval() == y2.convert());
+    CHECK(SoundlyContains(y1.to_interval(), y2.convert()));
 }
 
 TEST_CASE("affine_form::pow(double)")
@@ -304,14 +320,17 @@ TEST_CASE("affine_form::pow(double)")
     for (auto exponent = 0.5; exponent < 5; exponent += 0.5) {
         af y1 = x1.pow(exponent);
         AAF y2 = x2 ^ exponent;
-        CHECK(y1.to_interval() == y2.convert());
-        CHECK(y1 == y2);
+        // Containment, not equality/structural-term comparison: pow(double)
+        // routes through apply_unary_bounded, which now adds a deliberate
+        // small safety-margin noise term aaflib has no equivalent of (see
+        // SoundlyContains's doc comment) -- so both the interval bound and
+        // the raw term count are expected to differ from aaflib's.
+        CHECK(SoundlyContains(y1.to_interval(), y2.convert()));
     }
 
     af y1 = x1.pow(0.0);
     AAF y2 = x2 ^ 0.0;
-    CHECK(y1.to_interval() == y2.convert());
-    CHECK(y1 == y2);
+    CHECK(SoundlyContains(y1.to_interval(), y2.convert()));
 }
 
 TEST_CASE("affine_form::pow(double) domain checks")
@@ -336,14 +355,24 @@ TEST_CASE("affine_form point interval stays constant")
     CHECK(x.length() == 0);
     CHECK(x.radius() == 0.0);
 
+    // pow(T) has no tagged directed-rounding primitive (there is no
+    // fp::op_pow), so its constant path widens the RN result by 1 ULP
+    // each direction via widen_scalar_result -- exactly like pappus's own
+    // pre-existing interval<T>::cosh()/exp()/cos()/cbrt() already do
+    // unconditionally for their own constant/point inputs (see
+    // fp::detail::outward_lo/outward_hi: only the "_keep_zero" variants
+    // preserve an exact result). 2.0^2.0 = 4.0 exactly in real arithmetic,
+    // but the result is a thin (length 1) sound enclosure of 4.0, not
+    // required to be bit-exact.
     auto y = x.pow(2.0);
-    CHECK(y.length() == 0);
-    CHECK(y.to_interval() == ai(4.0, 4.0));
+    CHECK(y.length() <= 1);
+    CHECK(y.to_interval().contains(4.0));
 
     auto z = af::pow(2.0, x);
-    CHECK(z.length() == 0);
-    CHECK(z.to_interval() == ai(4.0, 4.0));
+    CHECK(z.length() <= 1);
+    CHECK(z.to_interval().contains(4.0));
 }
+
 
 TEST_CASE("affine_form rejects mixed contexts")
 {
@@ -473,7 +502,9 @@ TEST_CASE("affine_form::exp()")
     pappus::affine_context ctx;
 
     // constant form
-    CHECK(af(ctx, 1.0).exp().to_interval() == ai(std::exp(1.0)));
+    // op_exp has no "_keep_zero" variant -- unconditional 1-ULP nudge,
+    // same as pappus's pre-existing interval<T>::exp().
+    CHECK(af(ctx, 1.0).exp().to_interval().contains(std::exp(1.0)));
 
     ai u(0.5, 1.5);
     af x(ctx, u);
@@ -533,7 +564,9 @@ TEST_CASE("affine_form::cos()")
 {
     pappus::affine_context ctx;
 
-    CHECK(af(ctx, 0.0).cos().to_interval() == ai(1.0));
+    // op_cos has no "_keep_zero" variant -- unconditional 1-ULP nudge,
+    // same as pappus's pre-existing interval<T>::cos().
+    CHECK(af(ctx, 0.0).cos().to_interval().contains(1.0));
 
     // Monotone decreasing: cos on [0, π]
     ai u(0.0, pappus::fp::pi_v<double>);
@@ -589,7 +622,11 @@ TEST_CASE("affine_form::cosh()")
 {
     pappus::affine_context ctx;
 
-    CHECK(af(ctx, 0.0).cosh().to_interval() == ai(1.0));
+    // op_cosh has no "_keep_zero" directed-rounding variant (matches
+    // pappus's pre-existing interval<T>::cosh(), which has the same
+    // unconditional 1-ULP nudge) -- cosh(0)=1 exactly in real arithmetic,
+    // but the sound enclosure is thin, not required to be bit-exact [1,1].
+    CHECK(af(ctx, 0.0).cosh().to_interval().contains(1.0));
 
     // Symmetric, minimum at 0
     ai u(-1.0, 1.0);
@@ -635,7 +672,10 @@ TEST_CASE("affine_form::asin()")
     pappus::affine_context ctx;
 
     CHECK(af(ctx, 0.0).asin().to_interval() == ai(0.0));
-    CHECK(af(ctx, 1.0).asin().to_interval() == ai(pappus::fp::half_pi_v<double>));
+    // outward_lo/hi_keep_zero only preserves exactness when the RESULT is
+    // exactly zero -- asin(1)=half_pi is nonzero, so it gets the ordinary
+    // 1-ULP outward nudge each direction.
+    CHECK(af(ctx, 1.0).asin().to_interval().contains(pappus::fp::half_pi_v<double>));
 
     ai u(-0.8, 0.8);
     af x(ctx, u);
@@ -650,7 +690,10 @@ TEST_CASE("affine_form::acos()")
     pappus::affine_context ctx;
 
     CHECK(af(ctx, 1.0).acos().to_interval() == ai(0.0));
-    CHECK(af(ctx, 0.0).acos().to_interval() == ai(pappus::fp::half_pi_v<double>));
+    // outward_lo/hi_keep_zero only preserves exactness when the RESULT is
+    // exactly zero (see fp/math.hpp) -- acos(0)=half_pi is a nonzero
+    // result, so it gets the ordinary 1-ULP outward nudge each direction.
+    CHECK(af(ctx, 0.0).acos().to_interval().contains(pappus::fp::half_pi_v<double>));
 
     ai u(-0.8, 0.8);
     af x(ctx, u);
@@ -1046,3 +1089,102 @@ TEST_CASE("affine_form::log1p encloses its interior maximum residual")
     REQUIRE(critical < input.sup());
     CHECK(result.contains(std::log1p(critical)));
 }
+
+// --- Regression tests: 2026-09 affine-arithmetic soundness review ---
+
+TEST_CASE("affine_form::pow(int) rejects negative exponent crossing zero")
+{
+    pappus::affine_context ctx;
+    // x in [-1, 1], x^-3 is unbounded/undefined at the interior point x=0
+    // -- pow(int) used to have no guard at all for exponent < -1 (only
+    // exponent == -1 delegated to inv(), which does check this).
+    CHECK(is_invalid(af(ctx, ai(-1.0, 1.0)).pow(-3)));
+    CHECK(is_invalid(af(ctx, ai(-1.0, 1.0)).pow(-2)));
+    // Domain touching zero from one side is equally invalid (mirrors
+    // pow(double)'s existing, unmodified guard).
+    CHECK(is_invalid(af(ctx, ai(0.0, 2.0)).pow(-2)));
+    // Purely negative or purely positive, not touching zero, must still work.
+    CHECK_FALSE(is_invalid(af(ctx, ai(1.0, 2.0)).pow(-2)));
+    CHECK_FALSE(is_invalid(af(ctx, ai(-2.0, -1.0)).pow(-3)));
+}
+
+TEST_CASE("affine_form::pow(int) result is sound against dense sampling")
+{
+    // pow(int) used to build its result by hand, bypassing the
+    // self-correcting endpoint check every other unary op goes through.
+    pappus::affine_context ctx;
+    ai const input{1.0, 4.0};
+    af const x{ctx, input};
+    CHECK(sound(x.pow(3), [](double v) { return std::pow(v, 3); }, input));
+    CHECK(sound(x.pow(-2), [](double v) { return std::pow(v, -2); }, input));
+    CHECK(sound(x.pow(4), [](double v) { return std::pow(v, 4); }, input));
+}
+
+TEST_CASE("affine_form::operator*=(T) introduces no spurious slack for exact scaling")
+{
+    // Regression: an earlier version of this fix used an eps-proportional
+    // upper bound on rounding error instead of an exact error-free
+    // transform, which added nonzero slack even to EXACT multiplies (e.g.
+    // by -1). That silently turned abs()'s exactly-zero-at-boundary case
+    // into a small negative value, which then wrongly tripped sqrt()'s
+    // `a < 0` domain guard on a mathematically valid (touching-zero) input.
+    pappus::affine_context ctx;
+    af const x{ctx, ai(-8.65874, -0.0)};
+    auto const a = x.abs();
+    CHECK(a.min() == 0.0); // exact: negating [-8.65874, -0] must hit 0 exactly, not ~-1.4e-6
+    CHECK_FALSE(is_invalid(a.sqrt()));
+
+    // Multiplying by other exact scale factors (powers of two) must also
+    // introduce no term growth/slack.
+    pappus::affine_context ctx2;
+    af const y{ctx2, ai(1.0, 3.0)};
+    auto const doubled = y * 2.0;
+    CHECK(doubled.length() == y.length());
+    CHECK(doubled.to_interval() == ai(2.0, 6.0));
+}
+
+TEST_CASE("affine_form::tan() rejects a pole even when it sits at the domain's own lower edge")
+{
+    // interval<T>::tan()'s old quadrant-comparison guard treated
+    // [pi/2, pi] as pole-free; tan is actually unbounded immediately to
+    // the right of pi/2. affine_form::tan() uses its own (now-shared)
+    // predicate, exercised here on the same case for parity with
+    // interval.cpp's equivalent regression test.
+    pappus::affine_context ctx;
+    constexpr double half_pi = pappus::fp::half_pi_v<double>;
+    constexpr double pi = pappus::fp::pi_v<double>;
+    CHECK(is_invalid(af(ctx, ai(half_pi, pi)).tan()));
+    // A domain entirely within one branch, not touching any pole, must
+    // still produce a normal finite result.
+    CHECK_FALSE(is_invalid(af(ctx, ai(0.0, 1.0)).tan()));
+}
+
+TEST_CASE("affine_form::condense() error term is a sound upper bound, not just RN-close")
+{
+    // Build a form with several small noise terms of similar magnitude
+    // (so the RN transform_reduce sum and the correctly-rounded outward
+    // sum can plausibly diverge across many additions), condense it down
+    // to fewer terms, and check the resulting bound still soundly encloses
+    // the true combined range. NOTE: `after` is not required to be a
+    // superset of `before` -- both are independently-computed, independently
+    // outward-rounded upper bounds on the same true L1 magnitude (built via
+    // different summation groupings), so floating-point summation order can
+    // make one a few ULP tighter than the other despite both remaining
+    // sound; the real contract is soundness against the true value, not
+    // monotonicity between two different valid computations of it.
+    pappus::affine_context ctx;
+    af acc(ctx, 0.0);
+    for (int i = 0; i < 20; ++i) {
+        af xi(ctx, ai(-1.0, 1.0));
+        acc = acc + xi * 0.1;
+    }
+    // True combined range: 20 independent [-0.1, 0.1] contributions, worst
+    // case all aligned -> exactly [-2, 2].
+    ai const truth{-2.0, 2.0};
+    CHECK(acc.to_interval().contains(truth));
+    acc.condense(4);
+    CHECK(acc.length() <= 4);
+    CHECK(acc.to_interval().contains(truth));
+}
+
+
