@@ -222,7 +222,14 @@ public:
         return *this;
     }
 
-    // hull — works for SIMD: eve::min/max ignore NaN (NaN = empty interval)
+    // hull. Plain eve::min/max NaN behavior is "system dependent" per eve's
+    // own docs; neither `pedantic` ((x<y)?x:y, still NaN-poisoned when the
+    // second operand is NaN) nor `numeric` (NaN treated as the largest
+    // value -- ignores NaN for min, but max then PICKS the NaN) gives
+    // std::fmin/fmax-style ignore-either-NaN semantics for both min and
+    // max uniformly. Mask explicitly on is_empty() instead, mirroring the
+    // scalar branch above -- eve::min/max below only ever see two finite
+    // operands, so no NaN-semantics ambiguity reaches them at all.
     interval operator|(interval const other) const
     {
         if constexpr (std::floating_point<T>) {
@@ -230,10 +237,11 @@ public:
             if (other.is_empty()) return *this;
             return interval(std::fmin(inf(), other.inf()), std::fmax(sup(), other.sup()));
         } else {
-            return interval(std::pair<T,T>{
-                eve::min(inf(), other.inf()),
-                eve::max(sup(), other.sup())
-            });
+            auto emptyThis = is_empty();
+            auto emptyOther = other.is_empty();
+            auto lo = eve::if_else(emptyThis, other.inf(), eve::if_else(emptyOther, inf(), eve::min(inf(), other.inf())));
+            auto hi = eve::if_else(emptyThis, other.sup(), eve::if_else(emptyOther, sup(), eve::max(sup(), other.sup())));
+            return interval(std::pair<T,T>{lo, hi});
         }
     }
 
