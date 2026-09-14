@@ -2,7 +2,6 @@
 #define PAPPUS_INTERVAL_HPP
 
 #include <algorithm>
-#include <array>
 #include <cassert>
 #include <cmath>
 #include <concepts>
@@ -101,26 +100,42 @@ public:
         return std::fmax(fp::ropd<fp::op_sub>(m, inf()), fp::ropu<fp::op_sub>(sup(), m));
     }
 
-    T diameter() const requires std::floating_point<T>
+    T diameter() const requires eve::floating_value<T>
     {
-        if (is_empty()) return std::numeric_limits<T>::quiet_NaN();
-        return fp::ropu<fp::op_sub>(sup(), inf());
+        if constexpr (std::floating_point<T>) {
+            if (is_empty()) return std::numeric_limits<T>::quiet_NaN();
+            return fp::ropu<fp::op_sub>(sup(), inf());
+        } else {
+            auto d = fp::ropu<fp::op_sub>(sup(), inf());
+            return eve::if_else(is_empty(), eve::nan(eve::as<T>{}), d);
+        }
     }
 
-    T mig() const requires std::floating_point<T>
+    T mig() const requires eve::floating_value<T>
     {
-        if (is_empty())     return fp::nan_v<T>;
-        if (contains(T(0))) return T(0);
-        return std::min(fp::ropd<fp::op_abs>(inf()), fp::ropd<fp::op_abs>(sup()));
+        if constexpr (std::floating_point<T>) {
+            if (is_empty())     return fp::nan_v<T>;
+            if (contains(T(0))) return T(0);
+            return std::min(fp::ropd<fp::op_abs>(inf()), fp::ropd<fp::op_abs>(sup()));
+        } else {
+            auto d = eve::min(fp::ropd<fp::op_abs>(inf()), fp::ropd<fp::op_abs>(sup()));
+            auto v = eve::if_else(contains(T(0)), T(0), d);
+            return eve::if_else(is_empty(), eve::nan(eve::as<T>{}), v);
+        }
     }
 
-    T mag() const requires std::floating_point<T>
+    T mag() const requires eve::floating_value<T>
     {
-        if (is_empty()) return fp::nan_v<T>;
-        return std::max(fp::ropd<fp::op_abs>(inf()), fp::ropd<fp::op_abs>(sup()));
+        if constexpr (std::floating_point<T>) {
+            if (is_empty()) return fp::nan_v<T>;
+            return std::max(fp::ropd<fp::op_abs>(inf()), fp::ropd<fp::op_abs>(sup()));
+        } else {
+            auto d = eve::max(fp::ropd<fp::op_abs>(inf()), fp::ropd<fp::op_abs>(sup()));
+            return eve::if_else(is_empty(), eve::nan(eve::as<T>{}), d);
+        }
     }
 
-    bool contains(T v) const requires std::floating_point<T>
+    auto contains(T v) const requires eve::floating_value<T>
     {
         return inf() <= v && v <= sup();
     }
@@ -145,17 +160,21 @@ public:
         return std::isfinite(inf()) && std::isfinite(sup());
     }
 
-    bool is_infinite() const requires std::floating_point<T>
+    auto is_infinite() const requires eve::floating_value<T>
     {
-        return std::isinf(inf()) && std::isinf(sup());
+        if constexpr (std::floating_point<T>) {
+            return std::isinf(inf()) && std::isinf(sup());
+        } else {
+            return eve::is_infinite(inf()) && eve::is_infinite(sup());
+        }
     }
 
-    bool is_empty() const requires std::floating_point<T>
+    auto is_empty() const requires eve::floating_value<T>
     {
         return !(inf() <= sup()); // negation handles NaNs
     }
 
-    bool is_zero() const requires std::floating_point<T>
+    auto is_zero() const requires eve::floating_value<T>
     {
         return inf() == T(0) && sup() == T(0);
     }
@@ -183,7 +202,8 @@ public:
         return {left, right};
     }
 
-    subdivision<T> split(size_t n) const requires std::floating_point<T>;
+    template<typename U = T>
+    subdivision<U> split(size_t n) const requires std::floating_point<U>;
 
     // intersection — scalar only (SIMD branching on empty check is non-trivial)
     interval operator&(interval const other) const requires std::floating_point<T>
@@ -202,7 +222,14 @@ public:
         return *this;
     }
 
-    // hull — works for SIMD: eve::min/max ignore NaN (NaN = empty interval)
+    // hull. Plain eve::min/max NaN behavior is "system dependent" per eve's
+    // own docs; neither `pedantic` ((x<y)?x:y, still NaN-poisoned when the
+    // second operand is NaN) nor `numeric` (NaN treated as the largest
+    // value -- ignores NaN for min, but max then PICKS the NaN) gives
+    // std::fmin/fmax-style ignore-either-NaN semantics for both min and
+    // max uniformly. Mask explicitly on is_empty() instead, mirroring the
+    // scalar branch above -- eve::min/max below only ever see two finite
+    // operands, so no NaN-semantics ambiguity reaches them at all.
     interval operator|(interval const other) const
     {
         if constexpr (std::floating_point<T>) {
@@ -210,10 +237,11 @@ public:
             if (other.is_empty()) return *this;
             return interval(std::fmin(inf(), other.inf()), std::fmax(sup(), other.sup()));
         } else {
-            return interval(std::pair<T,T>{
-                eve::min(inf(), other.inf()),
-                eve::max(sup(), other.sup())
-            });
+            auto emptyThis = is_empty();
+            auto emptyOther = other.is_empty();
+            auto lo = eve::if_else(emptyThis, other.inf(), eve::if_else(emptyOther, inf(), eve::min(inf(), other.inf())));
+            auto hi = eve::if_else(emptyThis, other.sup(), eve::if_else(emptyOther, sup(), eve::max(sup(), other.sup())));
+            return interval(std::pair<T,T>{lo, hi});
         }
     }
 
@@ -421,113 +449,255 @@ public:
             if (x.is_empty() || x.sup() <= T(0)) return interval::empty();
             return interval(fp::ropd<fp::op_log>(x.inf()), fp::ropu<fp::op_log>(x.sup()));
         } else {
-            // Clamp both endpoints to [0, +inf] before taking log
-            auto lo = eve::max(inf(), T(0));
-            auto hi = eve::max(sup(), T(0));
-            return interval(fp::ropd<fp::op_log>(lo), fp::ropu<fp::op_log>(hi));
+            // domain is (0, +inf); a lane with sup() <= 0 has no valid log
+            // and must resolve to NaN bounds (soundness fix -- clamp-only
+            // would otherwise silently return a bogus finite result)
+            auto valid_mask = sup() > T(0);
+            auto nan_val = eve::nan(eve::as<T>{});
+            auto lo = eve::if_else(valid_mask, eve::max(inf(), T(0)), nan_val);
+            auto hi = eve::if_else(valid_mask, sup(), nan_val);
+            return interval(std::pair<T,T>{fp::ropd<fp::op_log>(lo), fp::ropu<fp::op_log>(hi)});
         }
     }
 
-    interval sin() const requires std::floating_point<T>
+    interval sin() const requires eve::floating_value<T>
     {
-        if (is_empty() || is_zero()) return *this;
-        if (is_infinite() || diameter() > fp::two_pi_v<T>) return interval(T(-1), T(1));
+        if constexpr (std::floating_point<T>) {
+            if (is_empty() || is_zero()) return *this;
+            if (is_infinite() || diameter() > fp::two_pi_v<T>) return interval(T(-1), T(1));
 
-        auto [a, b] = bounds();
-        int x = fp::trig::get_quadrant(a);
-        int y = fp::trig::get_quadrant(b);
+            auto [a, b] = bounds();
+            int x = fp::trig::get_quadrant(a);
+            int y = fp::trig::get_quadrant(b);
 
-        const auto D = [](auto v) { return fp::ropd<fp::op_sin>(v); };
-        const auto U = [](auto v) { return fp::ropu<fp::op_sin>(v); };
+            const auto D = [](auto v) { return fp::ropd<fp::op_sin>(v); };
+            const auto U = [](auto v) { return fp::ropu<fp::op_sin>(v); };
 
-        if (x == y) {
-            if (diameter() > fp::pi_v<T>) return interval(T(-1), T(1));
-            if (x == 0 || x == 3) return interval(D(a), U(b));
-            if (x == 1 || x == 2) return interval(D(b), U(a));
+            if (x == y) {
+                if (diameter() > fp::pi_v<T>) return interval(T(-1), T(1));
+                if (x == 0 || x == 3) return interval(D(a), U(b));
+                if (x == 1 || x == 2) return interval(D(b), U(a));
+            } else {
+                if (x == 3 && y == 0) return interval(D(a), U(b));
+                if (x == 1 && y == 2) return interval(D(b), U(a));
+                if ((x == 0 || x == 3) && (y == 1 || y == 2)) return interval(std::fmin(D(a), D(b)), T(1));
+                if ((x == 1 || x == 2) && (y == 0 || y == 3)) return interval(T(-1), std::fmax(U(a), U(b)));
+            }
+            return interval(T(-1), T(1));
         } else {
-            if (x == 3 && y == 0) return interval(D(a), U(b));
-            if (x == 1 && y == 2) return interval(D(b), U(a));
-            if ((x == 0 || x == 3) && (y == 1 || y == 2)) return interval(std::fmin(D(a), D(b)), T(1));
-            if ((x == 1 || x == 2) && (y == 0 || y == 3)) return interval(T(-1), std::fmax(U(a), U(b)));
+            auto broad_mask = is_infinite() || (diameter() > fp::two_pi_v<T>);
+            auto empty_mask = is_empty();
+
+            auto [a, b] = bounds();
+            auto qa = fp::trig::get_quadrant(a);
+            auto qb = fp::trig::get_quadrant(b);
+
+            const auto D = [](T v) { return fp::ropd<fp::op_sin>(v); };
+            const auto U = [](T v) { return fp::ropu<fp::op_sin>(v); };
+            auto da = D(a), db = D(b), ua = U(a), ub = U(b);
+
+            auto same_q = qa == qb;
+            auto wide_q = diameter() > fp::pi_v<T>;
+            auto q03a = (qa == T(0)) || (qa == T(3));
+            auto q12b = (qb == T(1)) || (qb == T(2));
+            auto q12a = (qa == T(1)) || (qa == T(2));
+            auto q03b = (qb == T(0)) || (qb == T(3));
+
+            auto same_lo = eve::if_else(wide_q, T(-1), eve::if_else(q03a, da, db));
+            auto same_hi = eve::if_else(wide_q, T(1),  eve::if_else(q03a, ub, ua));
+
+            auto pair30 = (qa == T(3)) && (qb == T(0));
+            auto pair12 = (qa == T(1)) && (qb == T(2));
+            auto cross_rise = q03a && q12b;
+            auto cross_fall = q12a && q03b;
+
+            auto cross_lo = eve::if_else(pair30, da, eve::if_else(pair12, db, eve::if_else(cross_rise, eve::min(da, db), T(-1))));
+            auto cross_hi = eve::if_else(pair30, ub, eve::if_else(pair12, ua, eve::if_else(cross_fall, eve::max(ua, ub), T(1))));
+
+            auto lo = eve::if_else(same_q, same_lo, cross_lo);
+            auto hi = eve::if_else(same_q, same_hi, cross_hi);
+
+            lo = eve::if_else(broad_mask, T(-1), lo);
+            hi = eve::if_else(broad_mask, T(1),  hi);
+            auto nan_val = eve::nan(eve::as<T>{});
+            lo = eve::if_else(empty_mask, nan_val, lo);
+            hi = eve::if_else(empty_mask, nan_val, hi);
+
+            return interval(std::pair<T,T>{lo, hi});
         }
-        return interval(T(-1), T(1));
     }
 
-    interval cos() const requires std::floating_point<T>
+    interval cos() const requires eve::floating_value<T>
     {
-        if (is_empty()) return *this;
-        if (is_infinite() || diameter() > fp::two_pi_v<T>) return interval(T(-1), T(1));
+        if constexpr (std::floating_point<T>) {
+            if (is_empty()) return *this;
+            if (is_infinite() || diameter() > fp::two_pi_v<T>) return interval(T(-1), T(1));
 
-        auto [a, b] = bounds();
-        auto x = fp::trig::get_quadrant(a);
-        auto y = fp::trig::get_quadrant(b);
+            auto [a, b] = bounds();
+            auto x = fp::trig::get_quadrant(a);
+            auto y = fp::trig::get_quadrant(b);
 
-        const auto D = [](auto v) { return fp::ropd<fp::op_cos>(v); };
-        const auto U = [](auto v) { return fp::ropu<fp::op_cos>(v); };
+            const auto D = [](auto v) { return fp::ropd<fp::op_cos>(v); };
+            const auto U = [](auto v) { return fp::ropu<fp::op_cos>(v); };
 
-        if (x == y) {
-            if (diameter() > fp::pi_v<T>) return interval(T(-1), T(1));
-            if (x == 0 || x == 1) return interval(D(b), U(a));
-            if (x == 2 || x == 3) return interval(D(a), U(b));
+            if (x == y) {
+                if (diameter() > fp::pi_v<T>) return interval(T(-1), T(1));
+                if (x == 0 || x == 1) return interval(D(b), U(a));
+                if (x == 2 || x == 3) return interval(D(a), U(b));
+            } else {
+                if (x == 2 && y == 3) return interval(D(a), U(b));
+                if (x == 0 && y == 1) return interval(D(b), U(a));
+                if ((x == 2 || x == 3) && (y == 0 || y == 1)) return interval(std::fmin(D(a), D(b)), T(1));
+                if ((x == 0 || x == 1) && (y == 2 || y == 3)) return interval(T(-1), std::fmax(U(a), U(b)));
+            }
+            return interval(T(-1), T(1));
         } else {
-            if (x == 2 && y == 3) return interval(D(a), U(b));
-            if (x == 0 && y == 1) return interval(D(b), U(a));
-            if ((x == 2 || x == 3) && (y == 0 || y == 1)) return interval(std::fmin(D(a), D(b)), T(1));
-            if ((x == 0 || x == 1) && (y == 2 || y == 3)) return interval(T(-1), std::fmax(U(a), U(b)));
+            auto broad_mask = is_infinite() || (diameter() > fp::two_pi_v<T>);
+            auto empty_mask = is_empty();
+
+            auto [a, b] = bounds();
+            auto qa = fp::trig::get_quadrant(a);
+            auto qb = fp::trig::get_quadrant(b);
+
+            const auto D = [](T v) { return fp::ropd<fp::op_cos>(v); };
+            const auto U = [](T v) { return fp::ropu<fp::op_cos>(v); };
+            auto da = D(a), db = D(b), ua = U(a), ub = U(b);
+
+            auto same_q = qa == qb;
+            auto wide_q = diameter() > fp::pi_v<T>;
+            auto q01a = (qa == T(0)) || (qa == T(1));
+            auto q23b = (qb == T(2)) || (qb == T(3));
+            auto q23a = (qa == T(2)) || (qa == T(3));
+            auto q01b = (qb == T(0)) || (qb == T(1));
+
+            auto same_lo = eve::if_else(wide_q, T(-1), eve::if_else(q01a, db, da));
+            auto same_hi = eve::if_else(wide_q, T(1),  eve::if_else(q01a, ua, ub));
+
+            auto pair23 = (qa == T(2)) && (qb == T(3));
+            auto pair01 = (qa == T(0)) && (qb == T(1));
+            auto cross_rise = q23a && q01b;
+            auto cross_fall = q01a && q23b;
+
+            auto cross_lo = eve::if_else(pair23, da, eve::if_else(pair01, db, eve::if_else(cross_rise, eve::min(da, db), T(-1))));
+            auto cross_hi = eve::if_else(pair23, ub, eve::if_else(pair01, ua, eve::if_else(cross_fall, eve::max(ua, ub), T(1))));
+
+            auto lo = eve::if_else(same_q, same_lo, cross_lo);
+            auto hi = eve::if_else(same_q, same_hi, cross_hi);
+
+            lo = eve::if_else(broad_mask, T(-1), lo);
+            hi = eve::if_else(broad_mask, T(1),  hi);
+            auto nan_val = eve::nan(eve::as<T>{});
+            lo = eve::if_else(empty_mask, nan_val, lo);
+            hi = eve::if_else(empty_mask, nan_val, hi);
+
+            return interval(std::pair<T,T>{lo, hi});
         }
-        return interval(T(-1), T(1));
     }
 
-    interval tan() const requires std::floating_point<T>
+    interval tan() const requires eve::floating_value<T>
     {
-        if (is_empty()) return *this;
-        if (diameter() > fp::pi_v<T>) return interval::infinite();
+        if constexpr (std::floating_point<T>) {
+            if (is_empty()) return *this;
+            if (diameter() > fp::pi_v<T>) return interval::infinite();
 
-        auto [a, b] = bounds();
-        // See pappus::fp::trig::has_tan_pole's doc comment: replaces a
-        // quadrant-comparison test that was demonstrably wrong for e.g.
-        // [pi/2, pi] (treated as pole-free; tan is actually unbounded
-        // immediately to the right of pi/2 there).
-        if (fp::trig::has_tan_pole(a, b)) return interval::infinite();
-        return interval(fp::ropd<fp::op_tan>(a), fp::ropu<fp::op_tan>(b));
+            auto [a, b] = bounds();
+            // See pappus::fp::trig::has_tan_pole's doc comment: replaces a
+            // quadrant-comparison test that was demonstrably wrong for e.g.
+            // [pi/2, pi] (treated as pole-free; tan is actually unbounded
+            // immediately to the right of pi/2 there).
+            if (fp::trig::has_tan_pole(a, b)) return interval::infinite();
+            return interval(fp::ropd<fp::op_tan>(a), fp::ropu<fp::op_tan>(b));
+        } else {
+            auto [a, b] = bounds();
+            auto unbounded_mask = (diameter() > fp::pi_v<T>) || fp::trig::has_tan_pole(a, b);
+            auto iv = eve::inf(eve::as<T>{});
+            auto lo = eve::if_else(unbounded_mask, -iv, fp::ropd<fp::op_tan>(a));
+            auto hi = eve::if_else(unbounded_mask,  iv, fp::ropu<fp::op_tan>(b));
+            auto nan_val = eve::nan(eve::as<T>{});
+            lo = eve::if_else(is_empty(), nan_val, lo);
+            hi = eve::if_else(is_empty(), nan_val, hi);
+            return interval(std::pair<T,T>{lo, hi});
+        }
     }
 
-    interval asin() const requires std::floating_point<T>
+    interval asin() const requires eve::floating_value<T>
     {
-        auto t = *this & interval(T(-1), T(1));
-        if (t.is_empty()) return interval::empty();
-        return interval(fp::ropd<fp::op_asin>(t.inf()), fp::ropu<fp::op_asin>(t.sup()));
+        if constexpr (std::floating_point<T>) {
+            auto t = *this & interval(T(-1), T(1));
+            if (t.is_empty()) return interval::empty();
+            return interval(fp::ropd<fp::op_asin>(t.inf()), fp::ropu<fp::op_asin>(t.sup()));
+        } else {
+            auto valid_mask = (sup() >= T(-1)) && (inf() <= T(1));
+            auto lo = eve::max(inf(), T(-1));
+            auto hi = eve::min(sup(), T(1));
+            auto nan_val = eve::nan(eve::as<T>{});
+            return interval(std::pair<T,T>{
+                eve::if_else(valid_mask, fp::ropd<fp::op_asin>(lo), nan_val),
+                eve::if_else(valid_mask, fp::ropu<fp::op_asin>(hi), nan_val)
+            });
+        }
     }
 
-    interval acos() const requires std::floating_point<T>
+    interval acos() const requires eve::floating_value<T>
     {
-        auto t = *this & interval(T(-1), T(1));
-        if (t.is_empty()) return interval::empty();
-        return interval(fp::ropd<fp::op_acos>(t.sup()), fp::ropu<fp::op_acos>(t.inf()));
+        if constexpr (std::floating_point<T>) {
+            auto t = *this & interval(T(-1), T(1));
+            if (t.is_empty()) return interval::empty();
+            return interval(fp::ropd<fp::op_acos>(t.sup()), fp::ropu<fp::op_acos>(t.inf()));
+        } else {
+            auto valid_mask = (sup() >= T(-1)) && (inf() <= T(1));
+            auto lo = eve::max(inf(), T(-1));
+            auto hi = eve::min(sup(), T(1));
+            auto nan_val = eve::nan(eve::as<T>{});
+            return interval(std::pair<T,T>{
+                eve::if_else(valid_mask, fp::ropd<fp::op_acos>(hi), nan_val),
+                eve::if_else(valid_mask, fp::ropu<fp::op_acos>(lo), nan_val)
+            });
+        }
     }
 
-    interval atan() const requires std::floating_point<T>
+    interval atan() const requires eve::floating_value<T>
     {
-        if (is_empty()) return interval::empty();
-        return interval(fp::ropd<fp::op_atan>(inf()), fp::ropu<fp::op_atan>(sup()));
+        if constexpr (std::floating_point<T>) {
+            if (is_empty()) return interval::empty();
+            return interval(fp::ropd<fp::op_atan>(inf()), fp::ropu<fp::op_atan>(sup()));
+        } else {
+            return interval(std::pair<T,T>{fp::ropd<fp::op_atan>(inf()), fp::ropu<fp::op_atan>(sup())});
+        }
     }
 
-    interval sinh() const requires std::floating_point<T>
+    interval sinh() const requires eve::floating_value<T>
     {
-        if (is_empty()) return interval::empty();
-        return interval(fp::ropd<fp::op_sinh>(inf()), fp::ropu<fp::op_sinh>(sup()));
+        if constexpr (std::floating_point<T>) {
+            if (is_empty()) return interval::empty();
+            return interval(fp::ropd<fp::op_sinh>(inf()), fp::ropu<fp::op_sinh>(sup()));
+        } else {
+            return interval(std::pair<T,T>{fp::ropd<fp::op_sinh>(inf()), fp::ropu<fp::op_sinh>(sup())});
+        }
     }
 
-    interval cosh() const requires std::floating_point<T>
+    interval cosh() const requires eve::floating_value<T>
     {
-        if (is_empty()) return interval::empty();
-        return interval(fp::ropd<fp::op_cosh>(mig()), fp::ropu<fp::op_cosh>(mag()));
+        if constexpr (std::floating_point<T>) {
+            if (is_empty()) return interval::empty();
+            return interval(fp::ropd<fp::op_cosh>(mig()), fp::ropu<fp::op_cosh>(mag()));
+        } else {
+            auto ai = eve::abs(inf()), as = eve::abs(sup());
+            auto contains_zero = (inf() <= T(0)) && (sup() >= T(0));
+            auto mig_ = eve::if_else(contains_zero, T(0), eve::min(ai, as));
+            auto mag_ = eve::max(ai, as);
+            return interval(std::pair<T,T>{fp::ropd<fp::op_cosh>(mig_), fp::ropu<fp::op_cosh>(mag_)});
+        }
     }
 
-    interval tanh() const requires std::floating_point<T>
+    interval tanh() const requires eve::floating_value<T>
     {
-        if (is_empty()) return interval::empty();
-        return interval(fp::ropd<fp::op_tanh>(inf()), fp::ropu<fp::op_tanh>(sup()));
+        if constexpr (std::floating_point<T>) {
+            if (is_empty()) return interval::empty();
+            return interval(fp::ropd<fp::op_tanh>(inf()), fp::ropu<fp::op_tanh>(sup()));
+        } else {
+            return interval(std::pair<T,T>{fp::ropd<fp::op_tanh>(inf()), fp::ropu<fp::op_tanh>(sup())});
+        }
     }
 
     interval square() const
@@ -554,60 +724,144 @@ public:
         }
     }
 
-    interval pow(int p) const requires std::floating_point<T>
+    interval pow(int p) const requires eve::floating_value<T>
     {
-        if (is_empty()) return interval::empty();
-        if (p == 0) return is_zero() ? interval::empty() : interval(T(1));
-        if (p == 1) return *this;
-        if (p < 0 && is_zero()) return interval::empty();
+        if constexpr (std::floating_point<T>) {
+            if (is_empty()) return interval::empty();
+            if (p == 0) return is_zero() ? interval::empty() : interval(T(1));
+            if (p == 1) return *this;
+            if (p < 0 && is_zero()) return interval::empty();
 
-        auto [a, b] = bounds();
+            auto [a, b] = bounds();
 
-        if (p % 2 == 0) { // even power
-            if (p > 0) {
-                if (a >= T(0)) return interval(ipow_d(a, p), ipow_u(b, p));
-                if (b <= T(0)) return interval(ipow_d(b, p), ipow_u(a, p));
-                return interval(ipow_d(mig(), p), ipow_u(mag(), p));
-            } else {
-                if (a >= T(0)) return interval(ipow_d(b, p), ipow_u(a, p));
-                if (b <= T(0)) return interval(ipow_d(a, p), ipow_u(b, p));
-                return interval(ipow_d(mag(), p), ipow_u(mig(), p));
+            if (p % 2 == 0) { // even power
+                if (p > 0) {
+                    if (a >= T(0)) return interval(ipow_d(a, p), ipow_u(b, p));
+                    if (b <= T(0)) return interval(ipow_d(b, p), ipow_u(a, p));
+                    return interval(ipow_d(mig(), p), ipow_u(mag(), p));
+                } else {
+                    if (a >= T(0)) return interval(ipow_d(b, p), ipow_u(a, p));
+                    if (b <= T(0)) return interval(ipow_d(a, p), ipow_u(b, p));
+                    return interval(ipow_d(mag(), p), ipow_u(mig(), p));
+                }
+            } else { // odd power
+                if (is_infinite()) return interval::infinite();
+                if (p > 0) {
+                    if (a == T(0)) return interval(T(0), ipow_u(b, p));
+                    if (b == T(0)) return interval(ipow_d(a, p), T(0));
+                    return interval(ipow_d(a, p), ipow_u(b, p));
+                } else {
+                    if (a == T(0)) return interval(ipow_d(b, p), fp::inf_v<T>);
+                    if (b == T(0)) return interval(-fp::inf_v<T>, ipow_u(a, p));
+                    if (contains(T(0))) return interval::infinite();
+                    return interval(ipow_d(b, p), ipow_u(a, p));
+                }
             }
-        } else { // odd power
-            if (is_infinite()) return interval::infinite();
-            if (p > 0) {
-                if (a == T(0)) return interval(T(0), ipow_u(b, p));
-                if (b == T(0)) return interval(ipow_d(a, p), T(0));
-                return interval(ipow_d(a, p), ipow_u(b, p));
-            } else {
-                if (a == T(0)) return interval(ipow_d(b, p), fp::inf_v<T>);
-                if (b == T(0)) return interval(-fp::inf_v<T>, ipow_u(a, p));
-                if (contains(T(0))) return interval::infinite();
-                return interval(ipow_d(b, p), ipow_u(a, p));
+        } else {
+            auto nan_val = eve::nan(eve::as<T>{});
+            auto iv = eve::inf(eve::as<T>{});
+            auto empty_mask = is_empty();
+
+            if (p == 0) {
+                auto invalid = is_zero() || empty_mask;
+                auto v = eve::if_else(invalid, nan_val, T(1));
+                return interval(std::pair<T,T>{v, v});
             }
+            if (p == 1) return *this;
+
+            auto zero_neg_mask = (p < 0) ? is_zero() : eve::false_(eve::as<T>{});
+            auto [a, b] = bounds();
+            T lo, hi;
+
+            if (p % 2 == 0) { // even power
+                auto pos = a >= T(0);
+                auto neg = b <= T(0);
+                if (p > 0) {
+                    lo = eve::if_else(pos, ipow_d(a, p), eve::if_else(neg, ipow_d(b, p), ipow_d(mig(), p)));
+                    hi = eve::if_else(pos, ipow_u(b, p), eve::if_else(neg, ipow_u(a, p), ipow_u(mag(), p)));
+                } else {
+                    lo = eve::if_else(pos, ipow_d(b, p), eve::if_else(neg, ipow_d(a, p), ipow_d(mag(), p)));
+                    hi = eve::if_else(pos, ipow_u(a, p), eve::if_else(neg, ipow_u(b, p), ipow_u(mig(), p)));
+                }
+            } else { // odd power
+                auto inf_mask = is_infinite();
+                if (p > 0) {
+                    auto a0 = a == T(0);
+                    auto b0 = b == T(0);
+                    lo = eve::if_else(a0, T(0), ipow_d(a, p));
+                    hi = eve::if_else(b0, T(0), ipow_u(b, p));
+                } else {
+                    auto a0 = a == T(0);
+                    auto b0 = b == T(0);
+                    auto contains0 = contains(T(0));
+                    lo = eve::if_else(a0, ipow_d(b, p), eve::if_else(b0, -iv, eve::if_else(contains0, -iv, ipow_d(b, p))));
+                    hi = eve::if_else(a0, iv, eve::if_else(b0, ipow_u(a, p), eve::if_else(contains0, iv, ipow_u(a, p))));
+                }
+                lo = eve::if_else(inf_mask, -iv, lo);
+                hi = eve::if_else(inf_mask, iv, hi);
+            }
+
+            lo = eve::if_else(zero_neg_mask, nan_val, lo);
+            hi = eve::if_else(zero_neg_mask, nan_val, hi);
+            lo = eve::if_else(empty_mask, nan_val, lo);
+            hi = eve::if_else(empty_mask, nan_val, hi);
+            return interval(std::pair<T,T>{lo, hi});
         }
     }
 
-    interval pow(T p) const requires std::floating_point<T>
+    interval pow(T p) const requires eve::floating_value<T>
     {
-        if (is_empty()) return interval::empty();
-        // Casting an out-of-int-range integral p to int is implementation-
-        // defined/UB territory; fall through to the general real-power path
-        // instead for such p (extreme in practice, but a public API must
-        // not invoke UB on any finite input).
-        if (std::fmod(p, T(1)) == T(0)
-            && std::fabs(p) <= T(std::numeric_limits<int>::max()))
-            return this->pow(static_cast<int>(p));
-        if (is_zero()) return p > T(0) ? interval::zero() : interval::empty();
-        if (p == T(0.5)) return this->sqrt();
-        return (p * this->log()).exp();
+        if constexpr (std::floating_point<T>) {
+            if (is_empty()) return interval::empty();
+            // Casting an out-of-int-range integral p to int is implementation-
+            // defined/UB territory; fall through to the general real-power path
+            // instead for such p (extreme in practice, but a public API must
+            // not invoke UB on any finite input).
+            if (std::fmod(p, T(1)) == T(0)
+                && std::fabs(p) <= T(std::numeric_limits<int>::max()))
+                return this->pow(static_cast<int>(p));
+            if (is_zero()) return p > T(0) ? interval::zero() : interval::empty();
+            if (p == T(0.5)) return this->sqrt();
+            return (p * this->log()).exp();
+        } else {
+            // p is itself a wide (lane-varying) exponent here, unlike pow(int).
+            // The integer-fast-path detection and the p==0.5 sqrt() shortcut
+            // both need a scalar-uniform p to dispatch cleanly per lane, so
+            // for wide T we skip both and always go through the general
+            // (p * log()).exp() path; only the zero-base case still needs an
+            // explicit override since log(0) is treated as invalid (empty),
+            // not -inf, elsewhere in this class.
+            auto empty_mask = is_empty();
+            auto zero_mask = is_zero();
+            auto zero_pos = p > T(0);
+            auto general = (p * this->log()).exp();
+            auto nan_val = eve::nan(eve::as<T>{});
+            auto lo = eve::if_else(zero_mask, eve::if_else(zero_pos, T(+0.0), nan_val), general.inf());
+            auto hi = eve::if_else(zero_mask, eve::if_else(zero_pos, T(-0.0), nan_val), general.sup());
+            lo = eve::if_else(empty_mask, nan_val, lo);
+            hi = eve::if_else(empty_mask, nan_val, hi);
+            return interval(std::pair<T,T>{lo, hi});
+        }
     }
 
-    interval pow(interval const other) const requires std::floating_point<T>
+    interval pow(interval const other) const requires eve::floating_value<T>
     {
-        auto x = (*this) & interval(T(0), fp::inf_v<T>);
-        if (x.is_empty() || other.is_empty()) return interval::empty();
-        return x.pow(other.inf()) | x.pow(other.sup());
+        if constexpr (std::floating_point<T>) {
+            auto x = (*this) & interval(T(0), fp::inf_v<T>);
+            if (x.is_empty() || other.is_empty()) return interval::empty();
+            return x.pow(other.inf()) | x.pow(other.sup());
+        } else {
+            auto valid_mask = sup() >= T(0);
+            auto nan_val = eve::nan(eve::as<T>{});
+            auto base_lo = eve::if_else(valid_mask, eve::max(inf(), T(0)), nan_val);
+            auto base_hi = eve::if_else(valid_mask, sup(), nan_val);
+            interval x(std::pair<T,T>{base_lo, base_hi});
+            auto other_empty = other.is_empty();
+            auto result = x.pow(other.inf()) | x.pow(other.sup());
+            auto lo = eve::if_else(other_empty, nan_val, result.inf());
+            auto hi = eve::if_else(other_empty, nan_val, result.sup());
+            return interval(std::pair<T,T>{lo, hi});
+        }
     }
 
     interval sqrt() const
@@ -617,9 +871,14 @@ public:
             if (x.is_empty()) return interval::empty();
             return interval(fp::ropd<fp::op_sqrt>(x.inf()), fp::ropu<fp::op_sqrt>(x.sup()));
         } else {
-            auto lo = eve::max(inf(), T(0));
-            auto hi = eve::max(sup(), T(0));
-            return interval(fp::ropd<fp::op_sqrt>(lo), fp::ropu<fp::op_sqrt>(hi));
+            // domain is [0, +inf); a lane with sup() < 0 has no valid sqrt
+            // and must resolve to NaN bounds (soundness fix -- clamp-only
+            // would otherwise silently return a bogus finite result)
+            auto valid_mask = sup() >= T(0);
+            auto nan_val = eve::nan(eve::as<T>{});
+            auto lo = eve::if_else(valid_mask, eve::max(inf(), T(0)), nan_val);
+            auto hi = eve::if_else(valid_mask, sup(), nan_val);
+            return interval(std::pair<T,T>{fp::ropd<fp::op_sqrt>(lo), fp::ropu<fp::op_sqrt>(hi)});
         }
     }
 
@@ -799,40 +1058,67 @@ private:
     static T ipow_d(T x, int p)
     {
         if (p < 0) return fp::ropd<fp::op_div>(T(1), ipow_u(x, -p));
-        if (x < T(0) && (p & 1)) {
-            // x^p = -|x|^p, want lower bound => negate upper bound of |x|^p
-            T ax = -x, r(1);
-            for (int n = p; n > 0; n >>= 1) {
-                if (n & 1) r = fp::ropu<fp::op_mul>(r, ax);
-                if (n > 1) ax = fp::ropu<fp::op_mul>(ax, ax);
+        if constexpr (std::floating_point<T>) {
+            if (x < T(0) && (p & 1)) {
+                // x^p = -|x|^p, want lower bound => negate upper bound of |x|^p
+                T ax = -x, r(1);
+                for (int n = p; n > 0; n >>= 1) {
+                    if (n & 1) r = fp::ropu<fp::op_mul>(r, ax);
+                    if (n > 1) ax = fp::ropu<fp::op_mul>(ax, ax);
+                }
+                return -r;
             }
-            return -r;
-        }
-        T ax = std::fabs(x), r(1);
-        for (int n = p; n > 0; n >>= 1) {
-            if (n & 1) r = fp::ropd<fp::op_mul>(r, ax);
-            if (n > 1) ax = fp::ropd<fp::op_mul>(ax, ax);
-        }
-        return r;
-    }
-    static T ipow_u(T x, int p)
-    {
-        if (p < 0) return fp::ropu<fp::op_div>(T(1), ipow_d(x, -p));
-        if (x < T(0) && (p & 1)) {
-            // x^p = -|x|^p, want upper bound => negate lower bound of |x|^p
-            T ax = -x, r(1);
+            T ax = std::fabs(x), r(1);
             for (int n = p; n > 0; n >>= 1) {
                 if (n & 1) r = fp::ropd<fp::op_mul>(r, ax);
                 if (n > 1) ax = fp::ropd<fp::op_mul>(ax, ax);
             }
-            return -r;
+            return r;
+        } else {
+            // Compute both directed-rounding variants of |x|^p by repeated
+            // squaring (p is a single scalar exponent applied uniformly to
+            // the whole lane batch), then select per lane: lanes with x<0
+            // and odd p flip sign and swap rounding direction, exactly like
+            // the scalar branch above.
+            T ax = eve::abs(x);
+            T rd(1), ru(1), ax_d = ax, ax_u = ax;
+            for (int n = p; n > 0; n >>= 1) {
+                if (n & 1) { rd = fp::ropd<fp::op_mul>(rd, ax_d); ru = fp::ropu<fp::op_mul>(ru, ax_u); }
+                if (n > 1) { ax_d = fp::ropd<fp::op_mul>(ax_d, ax_d); ax_u = fp::ropu<fp::op_mul>(ax_u, ax_u); }
+            }
+            if (p & 1) return eve::if_else(x < T(0), -ru, rd);
+            return rd;
         }
-        T ax = std::fabs(x), r(1);
-        for (int n = p; n > 0; n >>= 1) {
-            if (n & 1) r = fp::ropu<fp::op_mul>(r, ax);
-            if (n > 1) ax = fp::ropu<fp::op_mul>(ax, ax);
+    }
+    static T ipow_u(T x, int p)
+    {
+        if (p < 0) return fp::ropu<fp::op_div>(T(1), ipow_d(x, -p));
+        if constexpr (std::floating_point<T>) {
+            if (x < T(0) && (p & 1)) {
+                // x^p = -|x|^p, want upper bound => negate lower bound of |x|^p
+                T ax = -x, r(1);
+                for (int n = p; n > 0; n >>= 1) {
+                    if (n & 1) r = fp::ropd<fp::op_mul>(r, ax);
+                    if (n > 1) ax = fp::ropd<fp::op_mul>(ax, ax);
+                }
+                return -r;
+            }
+            T ax = std::fabs(x), r(1);
+            for (int n = p; n > 0; n >>= 1) {
+                if (n & 1) r = fp::ropu<fp::op_mul>(r, ax);
+                if (n > 1) ax = fp::ropu<fp::op_mul>(ax, ax);
+            }
+            return r;
+        } else {
+            T ax = eve::abs(x);
+            T rd(1), ru(1), ax_d = ax, ax_u = ax;
+            for (int n = p; n > 0; n >>= 1) {
+                if (n & 1) { rd = fp::ropd<fp::op_mul>(rd, ax_d); ru = fp::ropu<fp::op_mul>(ru, ax_u); }
+                if (n > 1) { ax_d = fp::ropd<fp::op_mul>(ax_d, ax_d); ax_u = fp::ropu<fp::op_mul>(ax_u, ax_u); }
+            }
+            if (p & 1) return eve::if_else(x < T(0), -rd, ru);
+            return ru;
         }
-        return r;
     }
 
     static std::pair<T, T> check_bounds(T lo, T hi)
@@ -948,20 +1234,23 @@ private:
     std::size_t const n_;
 };
 
-// split(n) definition — after subdivision<T> is complete
 template<typename T>
-subdivision<T> interval<T>::split(size_t n) const requires std::floating_point<T>
+template<typename U>
+subdivision<U> interval<T>::split(size_t n) const requires std::floating_point<U>
 {
     EXPECT(n > 0);
-    return subdivision<T>(*this, n);
+    return subdivision<U>(*this, n);
 }
 
 // ---------------------------------------------------------------------------
 // batch_evaluate_ia: SIMD interval evaluation via sub-interval packing
 //
 // Divides x into n_leaves sub-intervals, packs eve::cardinal_v<wide<T>> of
-// them at a time into interval<wide<T>>, evaluates f on the batch, then
-// reduces each SIMD result to a scalar hull contribution.
+// them at a time into interval<wide<T>>, evaluates f on the batch, unions
+// lane-wise, and reduces to a scalar hull once at the end. Sub-interval
+// endpoints are computed directly in wide<T> (no scalar segment() loop,
+// no array round-trip) — segment(i, n) is affine in i, so this is exact
+// vectorized index arithmetic, not an approximation.
 //
 // f must be a generic callable: auto f(auto x) { ... } or a template.
 // ---------------------------------------------------------------------------
@@ -973,20 +1262,18 @@ interval<T> batch_evaluate_ia(F&& f, interval<T> x, int n_leaves)
 
     EXPECT(n_leaves > 0);
 
-    auto result = interval<T>::empty();
+    T const h = x.diameter() / T(n_leaves);
+    W const h_w(h), inf_w(x.inf());
+    auto acc = interval<W>::empty();
 
-    alignas(W) std::array<T, W_size> lo_arr, hi_arr;
     int k = 0;
     for (; k + W_size <= n_leaves; k += W_size) {
-        for (int i = 0; i < W_size; ++i) {
-            auto seg = x.segment(static_cast<std::size_t>(k + i), static_cast<std::size_t>(n_leaves));
-            lo_arr[i] = seg.inf();
-            hi_arr[i] = seg.sup();
-        }
-        interval<W> sub(W(lo_arr.data()), W(hi_arr.data()));
-        auto r = f(sub);
-        result |= interval<T>(eve::minimum(r.inf()), eve::maximum(r.sup()));
+        W idx = eve::iota(eve::as<W>()) + W(T(k));
+        W lo = fp::ropd<fp::op_add>(inf_w, idx * h_w);
+        W hi = fp::ropu<fp::op_add>(inf_w, (idx + W(T(1))) * h_w);
+        acc |= f(interval<W>(lo, hi));
     }
+    auto result = interval<T>(eve::minimum(acc.inf()), eve::maximum(acc.sup()));
     // scalar tail for remaining sub-intervals
     for (; k < n_leaves; ++k)
         result |= f(x.segment(k, n_leaves));

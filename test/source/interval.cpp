@@ -467,3 +467,74 @@ TEST_CASE("interval::pow(double) does not invoke UB for a huge integral exponent
     CHECK((result.sup() == fp::inf || std::isfinite(result.sup())));
 }
 
+
+TEST_CASE("wide interval construction and accessors", "[IA][wide]")
+{
+    using W = eve::wide<double>;
+    using IW = pappus::interval<W>;
+    constexpr auto n = W::size();
+
+    std::vector<double> los(n), his(n);
+    for (std::size_t i = 0; i < n; ++i) { los[i] = static_cast<double>(i); his[i] = static_cast<double>(i) + 1.0; }
+    IW iv(W(los.data()), W(his.data()));
+
+    for (std::size_t i = 0; i < n; ++i) {
+        CHECK(iv.inf().get(i) == los[i]);
+        CHECK(iv.sup().get(i) == his[i]);
+    }
+}
+
+TEST_CASE("wide interval arithmetic matches scalar reference", "[IA][wide]")
+{
+    using W = eve::wide<double>;
+    using IW = pappus::interval<W>;
+    constexpr auto n = W::size();
+
+    // One representative case per lane (cycles through sign classes if
+    // n > case count, truncates if n < case count).
+    std::vector<I> a_cases { I(4, 5), I(4, 5), I(4, 5), I(-3, -2), I(-3, 2), I(-3, 2) };
+    std::vector<I> b_cases { I(2, 3), I(-2, 3), I(-3, -2), I(4, 5), I(-4, 5), I(-5, -4) };
+
+    std::vector<double> alo(n), ahi(n), blo(n), bhi(n);
+    std::vector<I> expected(n);
+    for (std::size_t i = 0; i < n; ++i) {
+        auto const& a = a_cases[i % a_cases.size()];
+        auto const& b = b_cases[i % b_cases.size()];
+        alo[i] = a.inf(); ahi[i] = a.sup();
+        blo[i] = b.inf(); bhi[i] = b.sup();
+        expected[i] = a + b; // placeholder, overwritten per operator below
+    }
+    IW wa(W(alo.data()), W(ahi.data()));
+    IW wb(W(blo.data()), W(bhi.data()));
+
+    auto check_lanewise = [&](IW const& result, auto op) {
+        for (std::size_t i = 0; i < n; ++i) {
+            auto const& a = a_cases[i % a_cases.size()];
+            auto const& b = b_cases[i % b_cases.size()];
+            auto const ref = op(a, b);
+            CHECK(result.inf().get(i) == ref.inf());
+            CHECK(result.sup().get(i) == ref.sup());
+        }
+    };
+
+    check_lanewise(wa + wb, [](I const& a, I const& b) { return a + b; });
+    check_lanewise(wa - wb, [](I const& a, I const& b) { return a - b; });
+    check_lanewise(wa * wb, [](I const& a, I const& b) { return a * b; });
+    check_lanewise(wa / wb, [](I const& a, I const& b) { return a / b; });
+}
+
+TEST_CASE("batch_evaluate_ia matches scalar segment evaluation", "[IA][wide]")
+{
+    auto f = [](auto x) { return x * x - x; };
+    I const x0(-1, 1);
+
+    for (int depth : { 2, 4, 6 }) {
+        auto const n_leaves = 1 << depth;
+        auto reference = I::empty();
+        for (int i = 0; i < n_leaves; ++i) {
+            reference |= f(x0.segment(static_cast<std::size_t>(i), static_cast<std::size_t>(n_leaves)));
+        }
+        auto const batched = pappus::batch_evaluate_ia(f, x0, n_leaves);
+        CHECK(batched == reference);
+    }
+}
