@@ -2,7 +2,6 @@
 #define PAPPUS_INTERVAL_HPP
 
 #include <algorithm>
-#include <array>
 #include <cassert>
 #include <cmath>
 #include <concepts>
@@ -961,8 +960,11 @@ subdivision<U> interval<T>::split(size_t n) const requires std::floating_point<U
 // batch_evaluate_ia: SIMD interval evaluation via sub-interval packing
 //
 // Divides x into n_leaves sub-intervals, packs eve::cardinal_v<wide<T>> of
-// them at a time into interval<wide<T>>, evaluates f on the batch, then
-// reduces each SIMD result to a scalar hull contribution.
+// them at a time into interval<wide<T>>, evaluates f on the batch, unions
+// lane-wise, and reduces to a scalar hull once at the end. Sub-interval
+// endpoints are computed directly in wide<T> (no scalar segment() loop,
+// no array round-trip) — segment(i, n) is affine in i, so this is exact
+// vectorized index arithmetic, not an approximation.
 //
 // f must be a generic callable: auto f(auto x) { ... } or a template.
 // ---------------------------------------------------------------------------
@@ -974,20 +976,18 @@ interval<T> batch_evaluate_ia(F&& f, interval<T> x, int n_leaves)
 
     EXPECT(n_leaves > 0);
 
-    auto result = interval<T>::empty();
+    T const h = x.diameter() / T(n_leaves);
+    W const h_w(h), inf_w(x.inf());
+    auto acc = interval<W>::empty();
 
-    alignas(W) std::array<T, W_size> lo_arr, hi_arr;
     int k = 0;
     for (; k + W_size <= n_leaves; k += W_size) {
-        for (int i = 0; i < W_size; ++i) {
-            auto seg = x.segment(static_cast<std::size_t>(k + i), static_cast<std::size_t>(n_leaves));
-            lo_arr[i] = seg.inf();
-            hi_arr[i] = seg.sup();
-        }
-        interval<W> sub(W(lo_arr.data()), W(hi_arr.data()));
-        auto r = f(sub);
-        result |= interval<T>(eve::minimum(r.inf()), eve::maximum(r.sup()));
+        W idx = eve::iota(eve::as<W>()) + W(T(k));
+        W lo = fp::ropd<fp::op_add>(inf_w, idx * h_w);
+        W hi = fp::ropu<fp::op_add>(inf_w, (idx + W(T(1))) * h_w);
+        acc |= f(interval<W>(lo, hi));
     }
+    auto result = interval<T>(eve::minimum(acc.inf()), eve::maximum(acc.sup()));
     // scalar tail for remaining sub-intervals
     for (; k < n_leaves; ++k)
         result |= f(x.segment(k, n_leaves));
