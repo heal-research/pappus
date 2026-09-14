@@ -42,7 +42,7 @@ target_link_libraries(paptest PRIVATE
     Catch2::Catch2WithMain
 )
 target_compile_features(paptest PRIVATE cxx_std_23)
-target_compile_options(paptest PRIVATE "$<$<CONFIG:Debug>:-g;>$<$<CONFIG:Release>:-O3;-g;-march=${PAPPUS_TARGET_ARCH}>;-fPIC")
+target_compile_options(paptest PRIVATE "$<$<CONFIG:Debug>:-g;>$<$<CONFIG:Release>:-O3;-g;>-march=${PAPPUS_TARGET_ARCH};-fPIC")
 
 catch_discover_tests(paptest)
 
