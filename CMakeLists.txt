@@ -17,6 +17,7 @@ include(cmake/variables.cmake)
 
 find_package(small_vector REQUIRED)
 find_package(eve REQUIRED)
+find_package(libassert REQUIRED)
 
 add_library(pappus_pappus INTERFACE)
 add_library(pappus::pappus ALIAS pappus_pappus)
@@ -30,7 +31,7 @@ target_include_directories(
 )
 
 target_compile_features(pappus_pappus INTERFACE cxx_std_23)
-target_link_libraries(pappus_pappus INTERFACE gch::small_vector eve::eve)
+target_link_libraries(pappus_pappus INTERFACE gch::small_vector eve::eve libassert::assert)
 
 set(DIRECTED_ROUNDING_DESCRIPTION "Use directed rounding towards -inf or +inf for interval bounds.")
 option(DIRECTED_ROUNDING ${DIRECTED_ROUNDING_DESCRIPTION} ON)
