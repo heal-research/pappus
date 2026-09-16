@@ -52,11 +52,13 @@
 
             nativeBuildInputs = with pkgs; [ cmake ];
 
-            # gch-small-vector and eve are used in pappus's public headers, so
-            # consumers (e.g. Operon) need them transitively via find_package(pappus)
+            # gch-small-vector, eve, and libassert are used in pappus's
+            # public headers, so consumers (e.g. Operon) need them
+            # transitively via find_package(pappus)
             propagatedBuildInputs = with pkgs; [
               gch-small-vector
               eve
+              libassert
             ];
           };
 

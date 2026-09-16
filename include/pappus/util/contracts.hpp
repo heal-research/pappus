@@ -1,18 +1,11 @@
 #ifndef PAPPUS_CONTRACTS_HPP
 #define PAPPUS_CONTRACTS_HPP
 
-#include <iostream>
+#include <libassert/assert.hpp>
 
-#define EXPECT(cond)                                                                                    \
-    if (!(cond)) {                                                                                      \
-        std::cerr << "precondition " << #cond << " failed at " << __FILE__ << ": " << __LINE__ << "\n"; \
-        std::terminate();                                                                               \
-    }
-
-#define ENSURE(cond)                                                                                     \
-    if (!(cond)) {                                                                                       \
-        std::cerr << "postcondition " << #cond << " failed at " << __FILE__ << ": " << __LINE__ << "\n"; \
-        std::terminate();                                                                                \
-    }
+// Matches Operon's operon/core/contracts.hpp macro text exactly, so a TU
+// that includes both never sees a macro-redefinition warning.
+#define ENSURE ASSERT
+#define EXPECT ASSERT
 
 #endif

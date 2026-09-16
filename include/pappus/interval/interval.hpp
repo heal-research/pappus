@@ -52,6 +52,8 @@ public:
     {
     }
 
+    interval(interval const&) = default;
+
     interval& operator=(const interval& other)
     {
         if (this != &other) {
