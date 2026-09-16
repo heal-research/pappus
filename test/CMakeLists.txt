@@ -20,7 +20,11 @@ if(PROJECT_IS_TOP_LEVEL)
   enable_testing()
 endif()
 
-set(PAPPUS_TARGET_ARCH "native" CACHE STRING "Target architecture for the test binary (-march)")
+# "native" is silently dropped by nix's sandbox (NIX_ENFORCE_NO_NATIVE),
+# falling back to a near-scalar baseline and making SIMD benchmarks
+# meaningless without anyone noticing (no warning surfaces past `nix build`
+# logs). Default to a concrete AVX2 target instead; override for other ISAs.
+set(PAPPUS_TARGET_ARCH "x86-64-v3" CACHE STRING "Target architecture for the test binary (-march)")
 find_package(Catch2 3 REQUIRED)
 find_package(nanobench REQUIRED)
 find_package(aaflib REQUIRED)
@@ -42,7 +46,7 @@ target_link_libraries(paptest PRIVATE
     Catch2::Catch2WithMain
 )
 target_compile_features(paptest PRIVATE cxx_std_23)
-target_compile_options(paptest PRIVATE "$<$<CONFIG:Debug>:-g;>$<$<CONFIG:Release>:-O3;-g;-march=${PAPPUS_TARGET_ARCH}>;-fPIC")
+target_compile_options(paptest PRIVATE "$<$<CONFIG:Debug>:-g;>$<$<CONFIG:Release>:-O3;-g;>-march=${PAPPUS_TARGET_ARCH};-fPIC")
 
 catch_discover_tests(paptest)
 

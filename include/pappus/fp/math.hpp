@@ -3,9 +3,9 @@
 
 // Directed-rounding primitives for sound interval arithmetic.
 //
-// Arithmetic ops use eve's `lower`/`upper` decorators: correctly-rounded
-// per-instruction rounding via the hardware MXCSR/FPCR save+restore. No
-// process-global state, safe to call from multiple threads concurrently.
+// Arithmetic ops use eve's `lower`/`upper` decorators (no rounding-mode
+// register involved: AVX-512 encodes direction as an instruction
+// operand; elsewhere eve uses an error-free transform + ULP nudge).
 //
 // Transcendentals use eve's polynomial approximations (round-to-nearest)
 // followed by a 1-ULP outward expansion via eve::prev / eve::next. This
@@ -225,13 +225,19 @@ template<typename T>
 T widen_hi(T x) { return detail::outward_hi(x); }
 
 namespace trig {
-    template<std::floating_point T>
-    int get_quadrant(T a)
+    template<eve::floating_value T>
+    auto get_quadrant(T a)
     {
-        auto x = std::fmod(a, two_pi_v<T>);
-        if (x == T(0)) return 0;
-        if (x < T(0)) x += two_pi_v<T>;
-        return static_cast<int>(x / half_pi_v<T>);
+        if constexpr (eve::value<T>) {
+            auto x = eve::fmod(a, two_pi_v<T>);
+            x = eve::if_else(x < T(0), x + two_pi_v<T>, x);
+            return eve::floor(x / half_pi_v<T>);
+        } else {
+            auto x = std::fmod(a, two_pi_v<T>);
+            if (x == T(0)) return 0;
+            if (x < T(0)) x += two_pi_v<T>;
+            return static_cast<int>(x / half_pi_v<T>);
+        }
     }
 
     // True iff the closed interval [a, b] (a <= b) contains a tangent
@@ -255,23 +261,31 @@ namespace trig {
     // does elsewhere in this file. Not a regression introduced by this
     // predicate -- an accepted, pre-existing limitation of doing periodic-
     // domain reduction without extended-precision pi.
-    template<std::floating_point T>
-    bool has_tan_pole(T a, T b)
+    template<eve::floating_value T>
+    auto has_tan_pole(T a, T b)
     {
-        // Non-finite bounds, or a finite `a`/`b` so large that k0*pi
-        // overflows: cannot safely rule out a pole in either case (an
-        // overflowed/non-finite `pole` compared via `<=` can spuriously
-        // read as "false", i.e. "no pole", when the domain is actually
-        // far too wide/extreme to say either way). Default to
-        // conservative true -- a false "contains a pole" only costs
-        // tightness (the caller rejects/treats as unbounded); a false
-        // "no pole" would be a real soundness break.
-        if (!std::isfinite(a) || !std::isfinite(b)) { return true; }
-        auto const pi = pi_v<T>, half_pi = half_pi_v<T>;
-        auto k0 = std::ceil(a / pi - T(0.5));
-        auto pole = k0 * pi + half_pi;
-        if (!std::isfinite(pole)) { return true; }
-        return pole <= b;
+        if constexpr (eve::value<T>) {
+            auto const pi = pi_v<T>, half_pi = half_pi_v<T>;
+            auto k0 = eve::ceil(a / pi - T(0.5));
+            auto pole = k0 * pi + half_pi;
+            auto finite_mask = eve::is_finite(a) && eve::is_finite(b) && eve::is_finite(pole);
+            return eve::if_else(finite_mask, pole <= b, eve::true_(eve::as<T>{}));
+        } else {
+            // Non-finite bounds, or a finite `a`/`b` so large that k0*pi
+            // overflows: cannot safely rule out a pole in either case (an
+            // overflowed/non-finite `pole` compared via `<=` can spuriously
+            // read as "false", i.e. "no pole", when the domain is actually
+            // far too wide/extreme to say either way). Default to
+            // conservative true -- a false "contains a pole" only costs
+            // tightness (the caller rejects/treats as unbounded); a false
+            // "no pole" would be a real soundness break.
+            if (!std::isfinite(a) || !std::isfinite(b)) { return true; }
+            auto const pi = pi_v<T>, half_pi = half_pi_v<T>;
+            auto k0 = std::ceil(a / pi - T(0.5));
+            auto pole = k0 * pi + half_pi;
+            if (!std::isfinite(pole)) { return true; }
+            return pole <= b;
+        }
     }
 }
 

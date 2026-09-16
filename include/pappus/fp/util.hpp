@@ -8,6 +8,8 @@
 #include <sstream>
 #include <stdexcept>
 
+#include <eve/eve.hpp>
+
 namespace pappus::fp {
 
 // double constants kept for backward compat
@@ -18,11 +20,16 @@ inline constexpr double tau     = two_pi;
 inline constexpr double inf     = std::numeric_limits<double>::infinity();
 inline constexpr double nan     = std::numeric_limits<double>::quiet_NaN();
 
-// type-parametric versions for use in generic code
-template<std::floating_point T> inline constexpr T pi_v      = T(3.141592653589793238462643383279502884L);
-template<std::floating_point T> inline constexpr T half_pi_v = pi_v<T> / T(2);
-template<std::floating_point T> inline constexpr T two_pi_v  = T(2) * pi_v<T>;
-template<std::floating_point T> inline constexpr T tau_v     = two_pi_v<T>;
+// type-parametric versions for generic code; wide<T> delegates to eve's own constants.
+template<eve::floating_value T> inline constexpr T pi_v      = T(3.141592653589793238462643383279502884L);
+template<eve::floating_value T> inline constexpr T half_pi_v = pi_v<T> / T(2);
+template<eve::floating_value T> inline constexpr T two_pi_v  = T(2) * pi_v<T>;
+template<eve::floating_value T> inline constexpr T tau_v     = two_pi_v<T>;
+
+template<typename T, typename N> inline eve::wide<T, N> const pi_v<eve::wide<T, N>>      = eve::pi(eve::as<eve::wide<T, N>>());
+template<typename T, typename N> inline eve::wide<T, N> const half_pi_v<eve::wide<T, N>> = eve::pio_2(eve::as<eve::wide<T, N>>());
+template<typename T, typename N> inline eve::wide<T, N> const two_pi_v<eve::wide<T, N>>  = eve::two_pi(eve::as<eve::wide<T, N>>());
+template<typename T, typename N> inline eve::wide<T, N> const tau_v<eve::wide<T, N>>     = eve::two_pi(eve::as<eve::wide<T, N>>());
 template<std::floating_point T> inline constexpr T inf_v     = std::numeric_limits<T>::infinity();
 template<std::floating_point T> inline constexpr T nan_v     = std::numeric_limits<T>::quiet_NaN();
 
