@@ -171,6 +171,28 @@ TEST_CASE("packed subdomains report a partial final pack", "[IA]")
     }
 }
 
+TEST_CASE("packed subdomains refill preserves leaf mapping", "[IA]")
+{
+    using S = float;
+    using W = eve::wide<S>;
+    using Pack = pappus::packed_subdomains<S, W>;
+    pappus::box<S> domain { pappus::interval<S>(-1, 1), pappus::interval<S>(2, 6) };
+    std::array<std::size_t, 3> schedule { 0, 1, 0 };
+    pappus::subdivision_plan plan(std::move(domain), schedule);
+    Pack pack(plan, 0);
+    auto const first = Pack::width < plan.leaf_count() ? Pack::width : 0;
+    pack.refill(plan, first);
+    alignas(W) std::array<S, Pack::width> lower{};
+    alignas(W) std::array<S, Pack::width> upper{};
+    eve::store(pack.lower(0), lower.data());
+    eve::store(pack.upper(1), upper.data());
+    for (std::size_t lane = 0; lane < pack.valid_lanes(); ++lane) {
+        auto const leaf = plan.leaf(first + lane);
+        CHECK(lower[lane] == leaf[0].inf());
+        CHECK(upper[lane] == leaf[1].sup());
+    }
+}
+
 TEST_CASE("addition", "[IA]")
 {
     // operator+

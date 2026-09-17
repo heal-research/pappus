@@ -75,8 +75,18 @@ private:
 
 public:
     packed_subdomains(subdivision_plan<T> const& plan, std::size_t first_leaf)
-        : first_leaf_(first_leaf), dimensions_(plan.dimensions()), lower_(dimensions_), upper_(dimensions_)
+        : dimensions_(plan.dimensions()), lower_(dimensions_), upper_(dimensions_)
     {
+        refill(plan, first_leaf);
+    }
+
+    void refill(subdivision_plan<T> const& plan, std::size_t first_leaf)
+    {
+        if (plan.dimensions() != dimensions_) {
+            throw std::invalid_argument("packed_subdomains: incompatible subdivision dimensions");
+        }
+        first_leaf_ = first_leaf;
+        valid_lanes_ = 0;
         for (std::size_t lane = 0; lane < width && first_leaf + lane < plan.leaf_count(); ++lane) {
             auto const leaf = plan.leaf(first_leaf + lane);
             for (std::size_t dimension = 0; dimension < dimensions_; ++dimension) {
