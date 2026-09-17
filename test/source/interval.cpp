@@ -1,6 +1,7 @@
 #include "pappus/interval/interval.hpp"
 #include "pappus/interval/box.hpp"
 #include "pappus/interval/iterator.hpp"
+#include "pappus/interval/packing.hpp"
 #include <iomanip>
 #include <catch2/catch_all.hpp>
 #include <functional>
@@ -66,6 +67,32 @@ TEST_CASE("interval")
         REQUIRE(shifted_parts.size() == 5);
         for (size_t i = 0; i < shifted_parts.size(); ++i)
             CHECK(shifted_parts[i] == shifted.segment(i, shifted_parts.size()));
+    }
+}
+
+TEST_CASE("packed subdomains preserve Cartesian leaves", "[IA]")
+{
+    pappus::box<float> domain { pappus::interval<float>(0, 2), pappus::interval<float>(10, 14) };
+    std::array<std::size_t, 3> schedule { 0, 1, 1 };
+    pappus::subdivision_plan plan(domain, schedule);
+    pappus::packed_subdomains<float> pack(plan, 0);
+
+    REQUIRE(plan.leaf_count() == 8);
+    REQUIRE(pack.valid_lanes() == std::min(plan.leaf_count(), pappus::packed_subdomains<float>::width));
+    alignas(eve::wide<float>) std::array<float, pappus::packed_subdomains<float>::width> xlo{};
+    alignas(eve::wide<float>) std::array<float, pappus::packed_subdomains<float>::width> xhi{};
+    alignas(eve::wide<float>) std::array<float, pappus::packed_subdomains<float>::width> ylo{};
+    alignas(eve::wide<float>) std::array<float, pappus::packed_subdomains<float>::width> yhi{};
+    eve::store(pack.lower(0), xlo.data());
+    eve::store(pack.upper(0), xhi.data());
+    eve::store(pack.lower(1), ylo.data());
+    eve::store(pack.upper(1), yhi.data());
+    for (std::size_t lane = 0; lane < pack.valid_lanes(); ++lane) {
+        auto const leaf = plan.leaf(lane);
+        CHECK(xlo[lane] <= leaf[0].inf());
+        CHECK(xhi[lane] >= leaf[0].sup());
+        CHECK(ylo[lane] <= leaf[1].inf());
+        CHECK(yhi[lane] >= leaf[1].sup());
     }
 }
 
