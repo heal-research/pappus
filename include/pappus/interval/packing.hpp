@@ -98,6 +98,8 @@ public:
     [[nodiscard]] auto dimensions() const noexcept -> std::size_t { return dimensions_; }
     [[nodiscard]] auto lower(std::size_t dimension) const -> Wide { return eve::load(lower_.at(dimension).values.data(), eve::as<Wide> {}); }
     [[nodiscard]] auto upper(std::size_t dimension) const -> Wide { return eve::load(upper_.at(dimension).values.data(), eve::as<Wide> {}); }
+    [[nodiscard]] auto lower_data(std::size_t dimension) const -> T const* { return lower_.at(dimension).values.data(); }
+    [[nodiscard]] auto upper_data(std::size_t dimension) const -> T const* { return upper_.at(dimension).values.data(); }
 
 private:
     std::size_t first_leaf_{};
