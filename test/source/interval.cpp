@@ -123,6 +123,54 @@ TEST_CASE("packed interval lanes agree with scalar primitives", "[IA]")
     }
 }
 
+TEST_CASE("packed interval lanes agree for trigonometric powers", "[IA]")
+{
+    using S = float;
+    using W = eve::wide<S>;
+    using WI = pappus::interval<W>;
+    using Pack = pappus::packed_subdomains<S, W>;
+
+    pappus::box<S> domain { pappus::interval<S>(-5, 5), pappus::interval<S>(-5, 5) };
+    std::array<std::size_t, 4> schedule { 0, 1, 0, 1 };
+    pappus::subdivision_plan plan(domain, schedule);
+    Pack pack(plan, 0);
+    WI const x(pack.lower(0), pack.upper(0));
+    WI const y(pack.lower(1), pack.upper(1));
+    auto const wide = x.sin() + x.cos() * x.pow(S { 2 }) + y;
+
+    alignas(W) std::array<S, Pack::width> lower{};
+    alignas(W) std::array<S, Pack::width> upper{};
+    eve::store(wide.inf(), lower.data());
+    eve::store(wide.sup(), upper.data());
+    for (std::size_t lane = 0; lane < pack.valid_lanes(); ++lane) {
+        auto const leaf = plan.leaf(lane);
+        auto const scalar = leaf[0].sin() + leaf[0].cos() * leaf[0].pow(S { 2 }) + leaf[1];
+        CHECK(lower[lane] <= scalar.inf());
+        CHECK(upper[lane] >= scalar.sup());
+        CHECK(upper[lane] == Catch::Approx(scalar.sup()).margin(1e-4F));
+    }
+}
+
+TEST_CASE("packed subdomains report a partial final pack", "[IA]")
+{
+    using S = float;
+    using W = eve::wide<S>;
+    using Pack = pappus::packed_subdomains<S, W>;
+    pappus::box<S> domain { pappus::interval<S>(-1, 1), pappus::interval<S>(0, 2) };
+    std::array<std::size_t, 3> schedule { 0, 1, 0 };
+    pappus::subdivision_plan plan(domain, schedule);
+    Pack pack(plan, 1);
+
+    REQUIRE(pack.first_leaf() == 1);
+    REQUIRE(pack.valid_lanes() == std::min(Pack::width, plan.leaf_count() - 1));
+    for (std::size_t lane = 0; lane < pack.valid_lanes(); ++lane) {
+        auto const leaf = plan.leaf(pack.first_leaf() + lane);
+        alignas(W) std::array<S, Pack::width> lower{};
+        eve::store(pack.lower(0), lower.data());
+        CHECK(lower[lane] <= leaf[0].inf());
+    }
+}
+
 TEST_CASE("addition", "[IA]")
 {
     // operator+
