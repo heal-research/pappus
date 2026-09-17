@@ -96,6 +96,33 @@ TEST_CASE("packed subdomains preserve Cartesian leaves", "[IA]")
     }
 }
 
+TEST_CASE("packed interval lanes agree with scalar primitives", "[IA]")
+{
+    using S = float;
+    using W = eve::wide<S>;
+    using WI = pappus::interval<W>;
+    using Pack = pappus::packed_subdomains<S, W>;
+
+    pappus::box<S> domain { pappus::interval<S>(1, 5), pappus::interval<S>(2, 4) };
+    std::array<std::size_t, 3> schedule { 0, 1, 0 };
+    pappus::subdivision_plan plan(domain, schedule);
+    Pack pack(plan, 0);
+    WI const x(pack.lower(0), pack.upper(0));
+    WI const y(pack.lower(1), pack.upper(1));
+    auto const wide = x.pow(y) + x * y / y;
+
+    alignas(W) std::array<S, Pack::width> lower{};
+    alignas(W) std::array<S, Pack::width> upper{};
+    eve::store(wide.inf(), lower.data());
+    eve::store(wide.sup(), upper.data());
+    for (std::size_t lane = 0; lane < pack.valid_lanes(); ++lane) {
+        auto const leaf = plan.leaf(lane);
+        auto const scalar = leaf[0].pow(leaf[1]) + leaf[0] * leaf[1] / leaf[1];
+        CHECK(lower[lane] <= scalar.inf());
+        CHECK(upper[lane] >= scalar.sup());
+    }
+}
+
 TEST_CASE("addition", "[IA]")
 {
     // operator+
