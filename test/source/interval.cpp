@@ -177,7 +177,7 @@ TEST_CASE("packed subdomains refill preserves leaf mapping", "[IA]")
     using W = eve::wide<S>;
     using Pack = pappus::packed_subdomains<S, W>;
     pappus::box<S> domain { pappus::interval<S>(-1, 1), pappus::interval<S>(2, 6) };
-    std::array<std::size_t, 3> schedule { 0, 1, 0 };
+    std::array<std::size_t, 4> schedule { 0, 1, 0, 1 };
     pappus::subdivision_plan plan(std::move(domain), schedule);
     Pack pack(plan, 0);
     auto const first = Pack::width < plan.leaf_count() ? Pack::width : 0;

@@ -45,12 +45,9 @@ public:
             throw std::out_of_range("pappus::subdivision_plan: leaf ordinal out of range");
         }
         auto result = domain_;
-        std::vector<std::size_t> cells(domain_.size());
-        std::vector<std::size_t> bits(domain_.size());
-        for (std::size_t bit = 0; bit < schedule_.size(); ++bit) {
-            auto const dimension = schedule_[bit];
-            cells[dimension] |= ((ordinal >> bit) & std::size_t { 1 }) << bits[dimension]++;
-        }
+        std::vector<std::size_t> cells(dimensions());
+        std::vector<std::size_t> bits(dimensions());
+        fill_cells(ordinal, cells, bits);
         for (std::size_t dimension = 0; dimension < domain_.size(); ++dimension) {
             if (splits_[dimension] != 0) {
                 result[dimension] = domain_[dimension].segment(cells[dimension], std::size_t { 1 } << splits_[dimension]);
@@ -59,11 +56,11 @@ public:
         return result;
     }
 
+private:
     template<std::floating_point, typename>
     friend class packed_subdomains;
 
-    void fill_leaf(std::size_t ordinal, std::span<T> lower, std::span<T> upper, std::span<std::size_t> cells,
-                   std::span<std::size_t> bits) const
+    void fill_cells(std::size_t ordinal, std::span<std::size_t> cells, std::span<std::size_t> bits) const
     {
         if (ordinal >= leaf_count()) {
             throw std::out_of_range("pappus::subdivision_plan: leaf ordinal out of range");
@@ -74,15 +71,8 @@ public:
             auto const dimension = schedule_[bit];
             cells[dimension] |= ((ordinal >> bit) & std::size_t { 1 }) << bits[dimension]++;
         }
-        for (std::size_t dimension = 0; dimension < dimensions(); ++dimension) {
-            auto const segment = splits_[dimension] == 0 ? domain_[dimension]
-                                                        : domain_[dimension].segment(cells[dimension], std::size_t { 1 } << splits_[dimension]);
-            lower[dimension] = segment.inf();
-            upper[dimension] = segment.sup();
-        }
     }
 
-private:
     box<T> domain_;
     std::vector<std::size_t> schedule_;
     std::vector<std::size_t> splits_;
@@ -102,7 +92,7 @@ private:
 
 public:
     packed_subdomains(subdivision_plan<T> const& plan, std::size_t first_leaf)
-        : dimensions_(plan.dimensions()), lower_(dimensions_), upper_(dimensions_), lowerValues_(dimensions_), upperValues_(dimensions_), cells_(dimensions_), bits_(dimensions_)
+        : dimensions_(plan.dimensions()), lower_(dimensions_), upper_(dimensions_), cells_(dimensions_), bits_(dimensions_)
     {
         refill(plan, first_leaf);
     }
@@ -115,10 +105,12 @@ public:
         first_leaf_ = first_leaf;
         valid_lanes_ = 0;
         for (std::size_t lane = 0; lane < width && first_leaf + lane < plan.leaf_count(); ++lane) {
-            plan.fill_leaf(first_leaf + lane, lowerValues_, upperValues_, cells_, bits_);
+            plan.fill_cells(first_leaf + lane, cells_, bits_);
             for (std::size_t dimension = 0; dimension < dimensions_; ++dimension) {
-                lower_[dimension].values[lane] = lowerValues_[dimension];
-                upper_[dimension].values[lane] = upperValues_[dimension];
+                auto const segment = plan.splits_[dimension] == 0 ? plan.domain_[dimension]
+                                                                  : plan.domain_[dimension].segment(cells_[dimension], std::size_t { 1 } << plan.splits_[dimension]);
+                lower_[dimension].values[lane] = segment.inf();
+                upper_[dimension].values[lane] = segment.sup();
             }
             ++valid_lanes_;
         }
@@ -144,8 +136,6 @@ private:
     std::size_t valid_lanes_{};
     std::vector<lanes> lower_;
     std::vector<lanes> upper_;
-    std::vector<T> lowerValues_;
-    std::vector<T> upperValues_;
     std::vector<std::size_t> cells_;
     std::vector<std::size_t> bits_;
 };
