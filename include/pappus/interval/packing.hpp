@@ -1,6 +1,7 @@
 #ifndef PAPPUS_INTERVAL_PACKING_HPP
 #define PAPPUS_INTERVAL_PACKING_HPP
 
+#include <algorithm>
 #include <array>
 #include <cstddef>
 #include <span>
@@ -12,6 +13,9 @@
 #include "pappus/interval/box.hpp"
 
 namespace pappus {
+
+template<std::floating_point T, typename Wide>
+class packed_subdomains;
 
 // Deterministic Cartesian subdivision. Schedule bit i selects the half of
 // schedule[i]'s dimension for leaf bit i.
@@ -55,6 +59,29 @@ public:
         return result;
     }
 
+    template<std::floating_point, typename>
+    friend class packed_subdomains;
+
+    void fill_leaf(std::size_t ordinal, std::span<T> lower, std::span<T> upper, std::span<std::size_t> cells,
+                   std::span<std::size_t> bits) const
+    {
+        if (ordinal >= leaf_count()) {
+            throw std::out_of_range("pappus::subdivision_plan: leaf ordinal out of range");
+        }
+        std::fill(cells.begin(), cells.end(), 0);
+        std::fill(bits.begin(), bits.end(), 0);
+        for (std::size_t bit = 0; bit < schedule_.size(); ++bit) {
+            auto const dimension = schedule_[bit];
+            cells[dimension] |= ((ordinal >> bit) & std::size_t { 1 }) << bits[dimension]++;
+        }
+        for (std::size_t dimension = 0; dimension < dimensions(); ++dimension) {
+            auto const segment = splits_[dimension] == 0 ? domain_[dimension]
+                                                        : domain_[dimension].segment(cells[dimension], std::size_t { 1 } << splits_[dimension]);
+            lower[dimension] = segment.inf();
+            upper[dimension] = segment.sup();
+        }
+    }
+
 private:
     box<T> domain_;
     std::vector<std::size_t> schedule_;
@@ -75,7 +102,7 @@ private:
 
 public:
     packed_subdomains(subdivision_plan<T> const& plan, std::size_t first_leaf)
-        : dimensions_(plan.dimensions()), lower_(dimensions_), upper_(dimensions_)
+        : dimensions_(plan.dimensions()), lower_(dimensions_), upper_(dimensions_), lowerValues_(dimensions_), upperValues_(dimensions_), cells_(dimensions_), bits_(dimensions_)
     {
         refill(plan, first_leaf);
     }
@@ -88,10 +115,10 @@ public:
         first_leaf_ = first_leaf;
         valid_lanes_ = 0;
         for (std::size_t lane = 0; lane < width && first_leaf + lane < plan.leaf_count(); ++lane) {
-            auto const leaf = plan.leaf(first_leaf + lane);
+            plan.fill_leaf(first_leaf + lane, lowerValues_, upperValues_, cells_, bits_);
             for (std::size_t dimension = 0; dimension < dimensions_; ++dimension) {
-                lower_[dimension].values[lane] = leaf[dimension].inf();
-                upper_[dimension].values[lane] = leaf[dimension].sup();
+                lower_[dimension].values[lane] = lowerValues_[dimension];
+                upper_[dimension].values[lane] = upperValues_[dimension];
             }
             ++valid_lanes_;
         }
@@ -117,6 +144,10 @@ private:
     std::size_t valid_lanes_{};
     std::vector<lanes> lower_;
     std::vector<lanes> upper_;
+    std::vector<T> lowerValues_;
+    std::vector<T> upperValues_;
+    std::vector<std::size_t> cells_;
+    std::vector<std::size_t> bits_;
 };
 
 } // namespace pappus
