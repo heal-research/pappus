@@ -85,7 +85,7 @@ template<typename T>
 T tiny_threshold()
 {
     using E = eve::element_type_t<T>;
-    return T(std::numeric_limits<E>::min() * E(std::uint64_t(1) << (std::numeric_limits<E>::digits + 2)));
+    return T(std::ldexp(std::numeric_limits<E>::min(), std::numeric_limits<E>::digits + 2));
 }
 
 // +inf as a lower bound / -inf as an upper bound of a result computed from
@@ -404,7 +404,7 @@ namespace trig {
             auto x = std::fmod(a, two_pi_v<T>);
             if (x == T(0)) return 0;
             if (x < T(0)) x += two_pi_v<T>;
-            return static_cast<int>(x / half_pi_v<T>);
+            return std::min(static_cast<int>(x / half_pi_v<T>), 3);
         }
     }
 

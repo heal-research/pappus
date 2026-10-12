@@ -972,6 +972,51 @@ TEMPLATE_TEST_CASE("regression: SIMD exp preserves empty lanes", "[soundness][re
     }
 }
 
+TEMPLATE_TEST_CASE("regression: SIMD reciprocal and log1p domain lanes match scalars", "[soundness][regression][simd]",
+                   eve::wide<float>, eve::wide<double>)
+{
+    using W = TestType;
+    using T = eve::element_type_t<W>;
+    W inv_lo { [](auto i, auto) { return (i % 3) == 0 ? T(-2) : (i % 3) == 1 ? T(0) : T(-2); } };
+    W inv_hi { [](auto i, auto) { return (i % 3) == 0 ? T(0) : (i % 3) == 1 ? T(2) : T(2); } };
+    auto const inverse = pappus::interval<W>(inv_lo, inv_hi).inv();
+    for (std::size_t i = 0; i < W::size(); ++i) {
+        if (i % 3 == 0) {
+            CHECK(inverse.inf().get(i) == -std::numeric_limits<T>::infinity());
+            CHECK(inverse.sup().get(i) == T(-0.5));
+        } else if (i % 3 == 1) {
+            CHECK(inverse.inf().get(i) == T(0.5));
+            CHECK(inverse.sup().get(i) == std::numeric_limits<T>::infinity());
+        } else {
+            CHECK(inverse.inf().get(i) == -std::numeric_limits<T>::infinity());
+            CHECK(inverse.sup().get(i) == std::numeric_limits<T>::infinity());
+        }
+    }
+
+    W log_lo { [](auto i, auto) { return (i % 2) == 0 ? T(-2) : T(-0.5); } };
+    W log_hi { [](auto i, auto) { return (i % 2) == 0 ? T(-1.5) : T(1); } };
+    auto const log = pappus::interval<W>(log_lo, log_hi).log1p();
+    for (std::size_t i = 0; i < W::size(); ++i) {
+        CHECK(static_cast<bool>(log.is_empty().get(i)) == ((i % 2) == 0));
+    }
+}
+
+TEMPLATE_TEST_CASE("regression: SIMD uniform scalar operands agree with scalar lanes", "[soundness][regression][simd]",
+                   eve::wide<float>, eve::wide<double>)
+{
+    using W = TestType;
+    using T = eve::element_type_t<W>;
+    W lo { [](auto i, auto) { return T(i + 1); } };
+    W hi { [](auto i, auto) { return T(i + 2); } };
+    W scalar { T(3) };
+    auto const wide = pappus::interval<W>(lo, hi) / scalar;
+    for (std::size_t i = 0; i < W::size(); ++i) {
+        auto const scalar_result = pappus::interval<T>(lo.get(i), hi.get(i)) / T(3);
+        CHECK(wide.inf().get(i) == scalar_result.inf());
+        CHECK(wide.sup().get(i) == scalar_result.sup());
+    }
+}
+
 TEMPLATE_TEST_CASE("regression: ropd/ropu<op_div> are the exact directed quotients", "[soundness][regression]", float, double)
 {
     namespace fp = pappus::fp;
@@ -1153,6 +1198,48 @@ TEST_CASE("eve double kernels and libm stay within 3/4 of the ULP margins in fp/
         CHECK(worst_eve <= eve_limit);
         // widen_lo/widen_hi (affine_form) use k_libm_ulps
         CHECK(worst_libm <= libm_limit);
+    }
+}
+
+TEST_CASE("eve and libm margins cover extreme transcendental arguments", "[soundness][margin]")
+{
+    struct StressCase {
+        char const* name;
+        double (*eve_fn)(double);
+        double (*libm_fn)(double);
+        int (*ref)(mpfr_ptr, mpfr_srcptr, mpfr_rnd_t);
+        std::vector<double> inputs;
+    };
+    auto const half_pi = std::acos(-1.0) / 2;
+    std::vector<StressCase> const cases {
+        { "sin", [](double x) { return eve::sin(x); }, [](double x) { return std::sin(x); }, mpfr_sin,
+            { -1e300, -1e100, -1e16, -1e12, -1e6, 1e6, 1e12, 1e16, 1e100, 1e300 } },
+        { "cos", [](double x) { return eve::cos(x); }, [](double x) { return std::cos(x); }, mpfr_cos,
+            { -1e300, -1e100, -1e16, -1e12, -1e6, 1e6, 1e12, 1e16, 1e100, 1e300 } },
+        { "tan", [](double x) { return eve::tan(x); }, [](double x) { return std::tan(x); }, mpfr_tan,
+            { std::nextafter(half_pi, 0.0), std::nextafter(half_pi, std::numeric_limits<double>::infinity()),
+              std::nextafter(3 * half_pi, 0.0), std::nextafter(3 * half_pi, std::numeric_limits<double>::infinity()) } },
+        { "exp", [](double x) { return eve::exp(x); }, [](double x) { return std::exp(x); }, mpfr_exp,
+            { -745.0, -709.0, 700.0, 709.0 } },
+        { "sinh", [](double x) { return eve::sinh(x); }, [](double x) { return std::sinh(x); }, mpfr_sinh,
+            { -709.0, -700.0, 700.0, 709.0 } },
+        { "cosh", [](double x) { return eve::cosh(x); }, [](double x) { return std::cosh(x); }, mpfr_cosh,
+            { -709.0, -700.0, 700.0, 709.0 } },
+    };
+    double const eve_limit = 0.5 * pappus::fp::detail::k_eve_ulps;
+    double const libm_limit = 0.75 * pappus::fp::detail::k_libm_ulps;
+    for (auto const& c : cases) {
+        for (double x : c.inputs) {
+            mpfr_set_d(S().x, x, MPFR_RNDN);
+            c.ref(S().r, S().x, MPFR_RNDN);
+            // The EVE exp kernel intentionally flushes subnormal outputs;
+            // pappus repairs that with a coarse enclosing upper bound, so a
+            // kernel-ULP comparison is not meaningful in that region.
+            if (mpfr_inf_p(S().r) != 0 || mpfr_cmp_d(S().r, std::numeric_limits<double>::min()) < 0) continue;
+            INFO(c.name << " at " << hex(x));
+            CHECK(ulp_error(c.eve_fn(x), S().r) <= eve_limit);
+            CHECK(ulp_error(c.libm_fn(x), S().r) <= libm_limit);
+        }
     }
 }
 

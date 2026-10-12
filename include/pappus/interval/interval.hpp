@@ -456,21 +456,22 @@ public:
     interval inv() const
     {
         if constexpr (std::floating_point<T>) {
-            if (is_empty() || is_zero())   return interval::empty();
-            if (contains_strict(T(0)))     return interval::infinite();
+            if (is_empty() || is_zero()) return interval::empty();
+            if (inf() == T(0)) return interval(fp::ropd<fp::op_div>(T(1), sup()), fp::inf_v<T>);
+            if (sup() == T(0)) return interval(-fp::inf_v<T>, fp::ropu<fp::op_div>(T(1), inf()));
+            if (contains_strict(T(0))) return interval::infinite();
             return interval(fp::ropd<fp::op_div>(T(1), sup()), fp::ropu<fp::op_div>(T(1), inf()));
         } else {
-            // lane-wise mirror of the scalar branch: [0,0] -> empty, a zero in
-            // the interior -> infinite (without it 1/sup < 1/inf is an
-            // inverted pair, i.e. an empty lane that unions silently drop)
             auto const iv = eve::inf(eve::as<T>{});
             auto const nan_val = eve::nan(eve::as<T>{});
             auto const zero = is_zero();
+            auto const lower_zero = inf() == T(0);
+            auto const upper_zero = sup() == T(0);
             auto const straddle = inf() < T(0) && sup() > T(0);
             auto lo = fp::ropd<fp::op_div>(T(1), sup());
             auto hi = fp::ropu<fp::op_div>(T(1), inf());
-            lo = eve::if_else(zero, nan_val, eve::if_else(straddle, -iv, lo));
-            hi = eve::if_else(zero, nan_val, eve::if_else(straddle, iv, hi));
+            lo = eve::if_else(zero, nan_val, eve::if_else(upper_zero || straddle, -iv, lo));
+            hi = eve::if_else(zero, nan_val, eve::if_else(lower_zero || straddle, iv, hi));
             return interval(std::pair<T,T>{lo, hi});
         }
     }
@@ -967,9 +968,11 @@ public:
             auto lo = eve::max(x.inf(), T(-1));
             return interval(fp::ropd<fp::op_log1p>(lo), fp::ropu<fp::op_log1p>(x.sup()));
         } else {
-            auto lo = eve::max(inf(), T(-1));
-            auto hi = eve::max(sup(), T(-1));
-            return interval(fp::ropd<fp::op_log1p>(lo), fp::ropu<fp::op_log1p>(hi));
+            auto const valid_mask = sup() > T(-1);
+            auto const nan_val = eve::nan(eve::as<T>{});
+            auto lo = eve::if_else(valid_mask, eve::max(inf(), T(-1)), nan_val);
+            auto hi = eve::if_else(valid_mask, sup(), nan_val);
+            return interval(std::pair<T,T>{fp::ropd<fp::op_log1p>(lo), fp::ropu<fp::op_log1p>(hi)});
         }
     }
 

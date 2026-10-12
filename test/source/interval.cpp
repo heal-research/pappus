@@ -369,6 +369,8 @@ TEST_CASE("trigonometric functions", "[IA]")
         CHECK_IA_APPROX(I(-102, -100).sin(), I(-0.99482679135840646, 0.5063656411097589));
         CHECK(I(4.6e15, 4.7e15).sin() == I(-1, 1));
         CHECK_IA_APPROX(I(4503599627370495, 4503599627370496).sin(), I(0.87421730262363495, 1.0));
+        auto tiny_negative = -std::numeric_limits<double>::denorm_min();
+        CHECK_IA_APPROX(I(tiny_negative, fp::half_pi).sin(), I(tiny_negative, 1.0));
     }
 
     SECTION("cos")
@@ -397,6 +399,8 @@ TEST_CASE("trigonometric functions", "[IA]")
         CHECK_IA_APPROX(I(-102, -100).cos(), I(0.10158570369662133, 1));
         CHECK(I(4.6e15, 4.7e15).cos() == I(-1, 1));
         CHECK_IA_APPROX(I(4503599627370495, 4503599627370496).cos(), I(-0.48553486774222065, 0.47329288595430913));
+        auto tiny_negative = -std::numeric_limits<double>::denorm_min();
+        CHECK_IA_APPROX(I(tiny_negative, fp::half_pi).cos(), I(0.0, 1.0));
     }
 
     SECTION("tan")
