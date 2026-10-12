@@ -1510,7 +1510,8 @@ private:
 
     // Same purpose as scalar_result, for operations with no tagged
     // ropd/ropu<OP> (general pow, isqrt): widen an already RN-computed
-    // value by 1 ULP each direction instead of recomputing it twice with
+    // libm value by fp::widen_lo/widen_hi (a few ULPs each direction: libm
+    // is not correctly rounded) instead of recomputing it twice with
     // directed rounding.
     affine_form widen_scalar_result(T v) const
     {
@@ -1524,9 +1525,10 @@ private:
     // of the actual to_interval() detects and corrects the shortfall.
     //
     // fa/fb themselves are also computed by every caller via a plain
-    // (round-to-nearest) library call, not a directed one -- widen them
-    // outward by 1 ULP first (fp::widen_lo/widen_hi) so this check closes
-    // that gap too, not just the affine algebra's own associativity error.
+    // (round-to-nearest) libm call, not a directed one -- widen them
+    // outward by fp::widen_lo/widen_hi (a few ULPs; libm error is not
+    // limited to 1 ULP, e.g. glibc cbrt/sinh/tanh) first so this check
+    // closes that gap too, not just the affine algebra's own associativity error.
     affine_form apply_unary_bounded(T c, T alpha, T dzeta, T delta,
                                     T fa, T fb) const
     {

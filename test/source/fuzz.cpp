@@ -10,9 +10,9 @@
 //
 // A violation means the library produced an unsound (too-narrow) enclosure.
 //
-// Transcendental operations use eve-based approximations that may differ from
-// libm by 1-2 ULP, so a small tolerance (in ULPs) is used for those.
-// Basic arithmetic uses strict (0-ULP) checking.
+// Interval operations (including transcendentals) are checked with strict
+// (0-ULP) tolerance against libm; affine operations use a small tolerance
+// (see TOL_AA).
 //
 
 #include <catch2/catch_all.hpp>
@@ -313,10 +313,13 @@ void check_aa_binary_sound(I const& xiv, I const& yiv, AF const& result_af, F f,
     }
 }
 
-// Tolerances: 0 for exact arithmetic, 2 for eve-based interval transcendentals,
-// 8 for affine ops (accumulated center/radius + Chebyshev rounding).
+// Tolerances: 0 for exact arithmetic and for interval transcendentals, 8 for
+// affine ops (accumulated center/radius + Chebyshev rounding).
+// TOL_IV_TRAN used to be 2: the old one-step margin let the libm reference
+// fall outside interval bounds for cbrt/tan/tanh/... . The MPFR suite checks
+// the current widened bounds exactly, with no tolerance.
 constexpr int TOL_EXACT = 0;
-constexpr int TOL_IV_TRAN = 2;
+constexpr int TOL_IV_TRAN = 0;
 constexpr int TOL_AA = 8;
 
 } // namespace
