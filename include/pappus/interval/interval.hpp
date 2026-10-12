@@ -24,6 +24,33 @@ template<std::floating_point T> class subdivision;
 
 enum interval_class { M, Z, P, P0, P1, N, N0, N1, NONE };
 
+// Closed interval [inf, sup] over a floating-point type, or lane-wise over an
+// eve::wide<> of them.
+//
+// Soundness. With DIRECTED_ROUNDING every operation returns an enclosure:
+// for any real inputs inside the argument intervals the exact result lies in
+// the returned interval. Lower bounds are rounded toward -inf, upper bounds
+// toward +inf; transcendentals are widened by a fixed number of ULPs that
+// covers the measured error of eve's kernels (see fp/math.hpp).
+//
+// Empty intervals. empty() / is_empty() is the library's single
+// representation of "no real value": a domain error (sqrt/log/asin of a
+// range outside the domain, division by [0,0], ...) and also the result of
+// any bound pair that would be inverted (lo > hi), which check_bounds turns
+// into the empty interval instead of aborting the process. Empty is
+// represented as (NaN, NaN), so is_empty() == !(inf <= sup) is also true
+// for raw inverted/NaN bounds written through set_lower/set_upper. Why this
+// is the sound reading of an inverted result: an inverted pair is not an
+// enclosure of anything, so it must not be used as one. A caller that
+// checks is_empty() (arithmetic propagates empty through its NaN bounds,
+// the other operations test it explicitly) sees "no valid enclosure for this
+// computation" and discards the branch, falls back, or widens to
+// infinite(); silently swapping or clamping would instead fabricate a
+// finite interval that may exclude the true value. Two caveats: operator|
+// treats empty as the identity (the hull ignores a lane/branch that
+// produced no value), and operator& with an empty operand is empty. Code
+// that unions results must therefore treat an unexpected empty as failure
+// instead of dropping it.
 template<typename T = double>
 class interval {
 public:
@@ -431,16 +458,36 @@ public:
         if constexpr (std::floating_point<T>) {
             if (is_empty() || is_zero())   return interval::empty();
             if (contains_strict(T(0)))     return interval::infinite();
+            return interval(fp::ropd<fp::op_div>(T(1), sup()), fp::ropu<fp::op_div>(T(1), inf()));
+        } else {
+            // lane-wise mirror of the scalar branch: [0,0] -> empty, a zero in
+            // the interior -> infinite (without it 1/sup < 1/inf is an
+            // inverted pair, i.e. an empty lane that unions silently drop)
+            auto const iv = eve::inf(eve::as<T>{});
+            auto const nan_val = eve::nan(eve::as<T>{});
+            auto const zero = is_zero();
+            auto const straddle = inf() < T(0) && sup() > T(0);
+            auto lo = fp::ropd<fp::op_div>(T(1), sup());
+            auto hi = fp::ropu<fp::op_div>(T(1), inf());
+            lo = eve::if_else(zero, nan_val, eve::if_else(straddle, -iv, lo));
+            hi = eve::if_else(zero, nan_val, eve::if_else(straddle, iv, hi));
+            return interval(std::pair<T,T>{lo, hi});
         }
-        return interval(fp::ropd<fp::op_div>(T(1), sup()), fp::ropu<fp::op_div>(T(1), inf()));
     }
 
     interval exp() const
     {
         if constexpr (std::floating_point<T>) {
+            if (is_empty()) return interval::empty();
             return interval(std::fmax(T(0), fp::ropd<fp::op_exp>(inf())), fp::ropu<fp::op_exp>(sup()));
         } else {
-            return interval(eve::max(T(0), fp::ropd<fp::op_exp>(inf())), fp::ropu<fp::op_exp>(sup()));
+            auto const empty_mask = is_empty();
+            auto const nan_val = eve::nan(eve::as<T>{});
+            auto lo = eve::max(T(0), fp::ropd<fp::op_exp>(inf()));
+            auto hi = fp::ropu<fp::op_exp>(sup());
+            lo = eve::if_else(empty_mask, nan_val, lo);
+            hi = eve::if_else(empty_mask, nan_val, hi);
+            return interval(std::pair<T,T>{lo, hi});
         }
     }
 
@@ -1123,25 +1170,45 @@ private:
         }
     }
 
+    // Normalises a bound pair at construction.
+    //
+    // Inverted bounds (lo > hi) never abort and are never swapped or
+    // clamped: the pair becomes the canonical empty interval (NaN, NaN),
+    // lane-wise for SIMD intervals. See "Empty intervals" in the class
+    // documentation for why this is the sound reading. With the supported
+    // operations this is unreachable (their bounds are directed-rounded and
+    // monotone), so it only guards against a numerical-kernel error larger
+    // than the ULP margin in fp/math.hpp or an inverted pair passed by a
+    // caller.
     static std::pair<T, T> check_bounds(T lo, T hi)
     {
         if constexpr (std::floating_point<T>) {
+            if (lo > hi) return {+fp::nan_v<T>, -fp::nan_v<T>};
             // signed zero convention: +0 for left endpoints, -0 for right endpoints
             // see T. Hickey, Q. Ju, M. H. van Emden, Interval Arithmetic — Section 5.2
-            EXPECT(!(lo > hi));
             if (lo == T(0)) lo = T(+0.0);
             if (hi == T(0)) hi = T(-0.0);
         } else {
+            auto const inverted = lo > hi;
+            auto const nan_val  = eve::nan(eve::as<T>{});
+            lo = eve::if_else(inverted, nan_val, lo);
+            hi = eve::if_else(inverted, nan_val, hi);
             lo = eve::if_else(lo == T(0), T(+0.0), lo);
             hi = eve::if_else(hi == T(0), T(-0.0), hi);
         }
         return {lo, hi};
     }
 
+    // Internal SIMD operations construct through this path. Normalize them too
+    // so every constructor enforces the same empty-interval and signed-zero
+    // invariants as the public two-bound constructor.
     explicit interval(std::pair<T, T> iv)
         : inf_(iv.first)
         , sup_(iv.second)
     {
+        auto const normalized = check_bounds(iv.first, iv.second);
+        inf_ = normalized.first;
+        sup_ = normalized.second;
     }
 };
 

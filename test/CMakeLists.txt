@@ -28,6 +28,10 @@ set(PAPPUS_TARGET_ARCH "x86-64-v3" CACHE STRING "Target architecture for the tes
 find_package(Catch2 3 REQUIRED)
 find_package(nanobench REQUIRED)
 find_package(aaflib REQUIRED)
+# MPFR is the exact reference for source/soundness.cpp (directed-rounding soundness checks).
+find_path(MPFR_INCLUDE_DIR mpfr.h REQUIRED)
+find_library(MPFR_LIBRARY mpfr REQUIRED)
+find_library(GMP_LIBRARY gmp REQUIRED)
 include(Catch)
 
 # ---- Tests ----
@@ -38,12 +42,16 @@ add_executable(paptest
     source/benchmarks.cpp
     source/util.cpp
     source/fuzz.cpp
+    source/soundness.cpp
 )
+target_include_directories(paptest SYSTEM PRIVATE ${MPFR_INCLUDE_DIR})
 target_link_libraries(paptest PRIVATE
     pappus::pappus
     aaflib::aaf
     nanobench::nanobench
     Catch2::Catch2WithMain
+    ${MPFR_LIBRARY}
+    ${GMP_LIBRARY}
 )
 target_compile_features(paptest PRIVATE cxx_std_23)
 target_compile_options(paptest PRIVATE "$<$<CONFIG:Debug>:-g;>$<$<CONFIG:Release>:-O3;-g;>-march=${PAPPUS_TARGET_ARCH};-fPIC")

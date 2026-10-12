@@ -90,6 +90,8 @@
               ++ pkgs.lib.optionals enableTesting [
                 pkgs.catch2_3
                 pkgs.nanobench
+                pkgs.mpfr # exact reference for test/source/soundness.cpp
+                pkgs.gmp
                 inputs'.aaflib.packages.default
               ];
           };
