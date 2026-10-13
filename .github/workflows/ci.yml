@@ -33,6 +33,25 @@ jobs:
       - name: Run tests
         run: nix develop -c ctest --test-dir build/ci-mpfr --output-on-failure --no-tests=error --parallel 2
 
+
+  pappus-tests-aarch64-mpfr:
+    name: pappus-tests-aarch64-mpfr
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@eef61447b9ff4aafe5dcd4e0bbf5d482be7e7871 # v4.2.1
+      - uses: cachix/install-nix-action@ba0dd844c9180cbf77aa72a116d6fbc515d0e87b # v27
+      - name: Configure
+        run: >-
+          nix develop -c cmake -S . -B build/ci-aarch64-mpfr
+          -DCMAKE_BUILD_TYPE=Release
+          -Dpappus_DEVELOPER_MODE=ON
+          -DBUILD_TESTING=ON
+          -DPAPPUS_ENABLE_MPFR_SOUNDNESS=ON
+          -DPAPPUS_TARGET_ARCH=armv8-a
+      - name: Build tests
+        run: nix develop -c cmake --build build/ci-aarch64-mpfr --target paptest --parallel 2
+      - name: Run tests
+        run: nix develop -c ctest --test-dir build/ci-aarch64-mpfr --output-on-failure --no-tests=error --parallel 2
   pappus-tests-no-mpfr:
     name: pappus-tests-no-mpfr
     runs-on: ubuntu-24.04
