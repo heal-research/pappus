@@ -71,5 +71,5 @@ jobs:
           -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
       - name: Check changed C++ names
         env:
-          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+          BASE: ${{ github.event_name == 'pull_request' && github.event.pull_request.base.sha || github.event.before }}
         run: nix develop -c python3 tools/clang_tidy_diff.py --base "$BASE" --build-dir build/naming

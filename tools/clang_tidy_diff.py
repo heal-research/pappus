@@ -90,12 +90,14 @@ def main() -> None:
         {"name": str(path.relative_to(root)), "lines": ranges}
         for path, ranges in sorted(lines.items())
     ])
+    header_filter = ".*"
     for source in sorted(translation_units):
         subprocess.run([
             args.clang_tidy,
             "-p", str(args.build_dir),
             "--config-file", str(root / ".clang-tidy"),
             "--line-filter", line_filter,
+            "--header-filter", header_filter,
             str(source),
         ], cwd=root, check=True)
 
