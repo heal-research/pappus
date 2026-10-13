@@ -47,6 +47,7 @@ jobs:
           -Dpappus_DEVELOPER_MODE=ON
           -DBUILD_TESTING=ON
           -DPAPPUS_ENABLE_MPFR_SOUNDNESS=ON
+          -DPAPPUS_TARGET_ARCH=armv8-a
       - name: Build tests
         run: nix develop -c cmake --build build/ci-aarch64-mpfr --target paptest --parallel 2
       - name: Run tests
