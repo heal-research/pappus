@@ -73,10 +73,9 @@
             nativeBuildInputs =
               pappus.nativeBuildInputs
               ++ (with pkgs; [
-                clang-tools
+                llvmPackages_latest.clang-tools
                 bear
               ]);
-
             buildInputs =
               pappus.propagatedBuildInputs
               ++ (

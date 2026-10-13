@@ -51,3 +51,25 @@ jobs:
         run: nix develop -c cmake --build build/ci-no-mpfr --target paptest --parallel 2
       - name: Run tests
         run: nix develop -c ctest --test-dir build/ci-no-mpfr --output-on-failure --no-tests=error --parallel 2
+
+  pappus-naming:
+    name: pappus-naming
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@eef61447b9ff4aafe5dcd4e0bbf5d482be7e7871 # v4.2.1
+        with:
+          fetch-depth: 0
+      - uses: cachix/install-nix-action@ba0dd844c9180cbf77aa72a116d6fbc515d0e87b # v27
+      - name: Configure compile database
+        run: >-
+          nix develop -c cmake -S . -B build/naming
+          -DCMAKE_BUILD_TYPE=Release
+          -Dpappus_DEVELOPER_MODE=ON
+          -DBUILD_TESTING=ON
+          -DPAPPUS_ENABLE_MPFR_SOUNDNESS=ON
+          -DPAPPUS_TARGET_ARCH=x86-64-v3
+          -DCMAKE_EXPORT_COMPILE_COMMANDS=ON
+      - name: Check changed C++ names
+        env:
+          BASE: ${{ github.event_name == 'pull_request' && format('origin/{0}', github.base_ref) || github.event.before }}
+        run: nix develop -c python3 tools/clang_tidy_diff.py --base "$BASE" --build-dir build/naming
