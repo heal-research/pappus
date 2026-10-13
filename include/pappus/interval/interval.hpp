@@ -1125,7 +1125,8 @@ private:
                 if (n & 1) r = fp::ropd<fp::op_mul>(r, ax);
                 if (n > 1) ax = fp::ropd<fp::op_mul>(ax, ax);
             }
-            return r;
+            // |x|^p >= 0: the downward underflow nudge must not cross zero
+            return r < T(0) ? T(0) : r;
         } else {
             // Compute both directed-rounding variants of |x|^p by repeated
             // squaring (p is a single scalar exponent applied uniformly to

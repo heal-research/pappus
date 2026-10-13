@@ -520,6 +520,23 @@ TEST_CASE("trancendental functions", "[IA]")
     }
 }
 
+TEST_CASE("negative integer power of a tiny base stays non-empty", "[IA]")
+{
+    using IF = pappus::interval<float>;
+    IF const x { 3.19243e-4F, 3.89346e-2F };
+    for (int p : { -50, -60, -80, -100 }) {
+        auto const r = x.pow(p);
+        INFO("p = " << p);
+        CHECK(!r.is_empty());
+        CHECK(r.inf() >= 0.0F);
+        CHECK(r.sup() == std::numeric_limits<float>::infinity());
+    }
+    auto const wide = x.pow(IF { -100.0F, 100.0F });
+    CHECK(!wide.is_empty());
+    CHECK(wide.inf() >= 0.0F);
+    CHECK(wide.sup() == std::numeric_limits<float>::infinity());
+}
+
 TEST_CASE("power functions", "[IA]")
 {
     SECTION("integer power")
