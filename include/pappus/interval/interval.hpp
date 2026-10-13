@@ -863,6 +863,17 @@ public:
     {
         if constexpr (std::floating_point<T>) {
             if (is_empty()) return interval::empty();
+            if (std::isinf(p)) {
+                // x^(+-inf) over x >= 0: 0 below 1, 1 at 1, inf above 1 (reciprocal for -inf).
+                auto const x = (*this) & interval(T(0), fp::inf_v<T>);
+                if (x.is_empty()) return interval::empty();
+                auto const a = x.inf(), b = x.sup();
+                auto const zero = T(0), one = T(1), inf = fp::inf_v<T>;
+                if (p > T(0)) {
+                    return interval(a < one ? zero : (a == one ? one : inf), b > one ? inf : (b == one ? one : zero));
+                }
+                return interval(b > one ? zero : (b == one ? one : inf), a < one ? inf : (a == one ? one : zero));
+            }
             // Casting an out-of-int-range integral p to int is implementation-
             // defined/UB territory; fall through to the general real-power path
             // instead for such p (extreme in practice, but a public API must

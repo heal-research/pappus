@@ -520,6 +520,21 @@ TEST_CASE("trancendental functions", "[IA]")
     }
 }
 
+TEST_CASE("pow with an infinite exponent endpoint", "[IA]")
+{
+    constexpr auto pinf = std::numeric_limits<double>::infinity();
+    CHECK(I(0.5, 1.0).pow(pinf) == I(0.0, 1.0));
+    CHECK(I(0.5, 1.0).pow(-pinf) == I(1.0, pinf));
+    CHECK(I(0.2, 0.5).pow(pinf) == Z);
+    CHECK(I(2.0, 3.0).pow(-pinf) == Z);
+    CHECK(I(2.0, 3.0).pow(pinf) == I(pinf, pinf));
+    CHECK(I(0.5, 2.0).pow(pinf) == I(0.0, pinf));
+    CHECK(I(0.5, 1.0).pow(I(0.0, pinf)) == I(0.0, 1.0));
+    CHECK(I(0.5, 1.0).pow(I(-pinf, 0.0)) == I(1.0, pinf));
+    CHECK(I(2.0, 3.0).pow(I(0.0, pinf)) == I(1.0, pinf));
+    CHECK(I(-1.0, 1.0).pow(I(0.0, pinf)).inf() == 0.0);
+}
+
 TEST_CASE("power functions", "[IA]")
 {
     SECTION("integer power")
