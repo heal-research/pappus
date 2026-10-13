@@ -800,9 +800,9 @@ TEMPLATE_TEST_CASE("soundness: point intervals have bounded ULP width", "[soundn
     using I = pappus::interval<T>;
     rng_t g = make_rng(0x5eed0004);
     bool const f = std::is_same_v<T, float>;
-    // Transcendentals are widened by k_eve_ulps steps in the evaluation
+    // Transcendentals are widened by eve_ulp_margin steps in the evaluation
     // grid; a float narrowing adds at most one more step per endpoint.
-    std::int64_t const trans_max = f ? 2 : 2 * pappus::fp::detail::k_eve_ulps + 2;
+    std::int64_t const trans_max = f ? 2 : 2 * pappus::fp::detail::eve_ulp_margin + 2;
 
     for (auto const& op : unary_ops()) {
         std::int64_t limit;
@@ -1182,8 +1182,8 @@ TEST_CASE("eve double kernels and libm stay within 3/4 of the ULP margins in fp/
     rng_t g = make_rng(0x5eed0008);
     // The margin is expressed in the kernel-result grid, which can be half
     // the exact-result ULP at a binade boundary.
-    double const eve_limit = 0.5 * pappus::fp::detail::k_eve_ulps;
-    double const libm_limit = 0.75 * pappus::fp::detail::k_libm_ulps;
+    double const eve_limit = 0.5 * pappus::fp::detail::eve_ulp_margin;
+    double const libm_limit = 0.75 * pappus::fp::detail::libm_ulp_margin;
     for (auto const& c : cases) {
         double worst_eve = 0, worst_libm = 0;
         for (int i = 0; i < 20000; ++i) {
@@ -1196,7 +1196,7 @@ TEST_CASE("eve double kernels and libm stay within 3/4 of the ULP margins in fp/
         INFO(c.name << ": eve worst " << worst_eve << " ulp (limit " << eve_limit << "), libm worst " << worst_libm
                     << " ulp (limit " << libm_limit << ")");
         CHECK(worst_eve <= eve_limit);
-        // widen_lo/widen_hi (affine_form) use k_libm_ulps
+        // widen_lo/widen_hi (affine_form) use libm_ulp_margin
         CHECK(worst_libm <= libm_limit);
     }
 }
@@ -1226,8 +1226,8 @@ TEST_CASE("eve and libm margins cover extreme transcendental arguments", "[sound
         { "cosh", [](double x) { return eve::cosh(x); }, [](double x) { return std::cosh(x); }, mpfr_cosh,
             { -709.0, -700.0, 700.0, 709.0 } },
     };
-    double const eve_limit = 0.5 * pappus::fp::detail::k_eve_ulps;
-    double const libm_limit = 0.75 * pappus::fp::detail::k_libm_ulps;
+    double const eve_limit = 0.5 * pappus::fp::detail::eve_ulp_margin;
+    double const libm_limit = 0.75 * pappus::fp::detail::libm_ulp_margin;
     for (auto const& c : cases) {
         for (double x : c.inputs) {
             mpfr_set_d(S().x, x, MPFR_RNDN);
