@@ -547,6 +547,35 @@ TEST_CASE("pow with an infinite exponent endpoint", "[IA]")
     CHECK(E.pow(pinf).is_empty());
 }
 
+TEST_CASE("pow with an infinite exponent endpoint in packed lanes", "[IA]")
+{
+    using W = eve::wide<double, eve::fixed<4>>;
+    using IW = pappus::interval<W>;
+    constexpr auto pinf = std::numeric_limits<double>::infinity();
+    // lanes: [0.5,1], [0.2,0.5], [2,3], [0.5,2]; each packed lane must enclose the scalar result
+    // (the packed path has no integer fast path, so x^0 is [1-eps, 1+eps] rather than exactly 1)
+    IW const x { W { 0.5, 0.2, 2.0, 0.5 }, W { 1.0, 0.5, 3.0, 2.0 } };
+    auto const up = x.pow(IW { W(0.0), W(pinf) });
+    auto const down = x.pow(IW { W(-pinf), W(0.0) });
+    auto const all = x.pow(IW { W(-pinf), W(pinf) });
+    for (int lane = 0; lane < 4; ++lane) {
+        auto const xl = I(x.inf().get(lane), x.sup().get(lane));
+        auto const ul = xl.pow(I(0.0, pinf));
+        auto const dl = xl.pow(I(-pinf, 0.0));
+        auto const al = xl.pow(I(-pinf, pinf));
+        INFO("lane " << lane);
+        CHECK(up.inf().get(lane) <= ul.inf());
+        CHECK(up.sup().get(lane) >= ul.sup());
+        CHECK(down.inf().get(lane) <= dl.inf());
+        CHECK(down.sup().get(lane) >= dl.sup());
+        CHECK(all.inf().get(lane) <= al.inf());
+        CHECK(all.sup().get(lane) >= al.sup());
+    }
+    // [0.5,1]^[0,inf] must contain 0.5 = 0.5^1 and reach 0
+    CHECK(up.inf().get(0) == 0.0);
+    CHECK(up.sup().get(0) >= 1.0);
+}
+
 TEST_CASE("power functions", "[IA]")
 {
     SECTION("integer power")

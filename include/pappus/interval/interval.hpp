@@ -899,6 +899,19 @@ public:
             auto nan_val = eve::nan(eve::as<T>{});
             auto lo = eve::if_else(zero_mask, eve::if_else(zero_pos, T(+0.0), nan_val), general.inf());
             auto hi = eve::if_else(zero_mask, eve::if_else(zero_pos, T(-0.0), nan_val), general.sup());
+            // x^(+-inf) over x >= 0, lane-wise: 0 below 1, 1 at 1, inf above 1 (reciprocal for -inf).
+            // The general path above yields NaN (inf * log(x) with log(x) <= 0 at x = 1) for these lanes.
+            auto const inf_mask = eve::is_infinite(p);
+            auto const a = eve::max(inf(), T(0));
+            auto const b = sup();
+            auto const zero = T(0), one = T(1), pinf = eve::inf(eve::as<T>{});
+            auto const pos_lo = eve::if_else(a < one, zero, eve::if_else(a == one, one, pinf));
+            auto const pos_hi = eve::if_else(b > one, pinf, eve::if_else(b == one, one, zero));
+            auto const neg_lo = eve::if_else(b > one, zero, eve::if_else(b == one, one, pinf));
+            auto const neg_hi = eve::if_else(a < one, pinf, eve::if_else(a == one, one, zero));
+            auto const clipped_empty = b < zero;
+            lo = eve::if_else(inf_mask, eve::if_else(clipped_empty, nan_val, eve::if_else(zero_pos, pos_lo, neg_lo)), lo);
+            hi = eve::if_else(inf_mask, eve::if_else(clipped_empty, nan_val, eve::if_else(zero_pos, pos_hi, neg_hi)), hi);
             lo = eve::if_else(empty_mask, nan_val, lo);
             hi = eve::if_else(empty_mask, nan_val, hi);
             return interval(std::pair<T,T>{lo, hi});
