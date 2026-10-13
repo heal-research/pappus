@@ -533,6 +533,18 @@ TEST_CASE("pow with an infinite exponent endpoint", "[IA]")
     CHECK(I(0.5, 1.0).pow(I(-pinf, 0.0)) == I(1.0, pinf));
     CHECK(I(2.0, 3.0).pow(I(0.0, pinf)) == I(1.0, pinf));
     CHECK(I(-1.0, 1.0).pow(I(0.0, pinf)).inf() == 0.0);
+
+    // Zero base: 0^(+inf) = 0 and 0^(-inf) = +inf (limit convention). The union over a doubly
+    // infinite exponent is therefore [0, inf], a sound (if wide) enclosure.
+    CHECK(Z.pow(pinf) == Z);
+    CHECK(Z.pow(-pinf) == I(pinf, pinf));
+    CHECK(Z.pow(I(-pinf, pinf)) == I(0.0, pinf));
+    // Intermediate finite exponents stay enclosed for a doubly infinite exponent interval.
+    auto const full = I(0.5, 2.0).pow(I(-pinf, pinf));
+    CHECK(full.inf() == 0.0);
+    CHECK(full.sup() == pinf);
+    // An empty base stays empty.
+    CHECK(E.pow(pinf).is_empty());
 }
 
 TEST_CASE("power functions", "[IA]")
