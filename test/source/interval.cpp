@@ -571,6 +571,18 @@ TEST_CASE("pow with an infinite exponent endpoint in packed lanes", "[IA]")
         CHECK(all.inf().get(lane) <= al.inf());
         CHECK(all.sup().get(lane) >= al.sup());
     }
+    // bases touching zero, crossing zero, or unbounded: the finite endpoint 0 must contribute x^0 = 1
+    IW const y { W { 0.0, -2.0, 2.0, 0.5 }, W { 0.5, 0.5, pinf, 4.0 } };
+    for (auto const& e : { I(0.0, pinf), I(-pinf, 0.0), I(-0.0, pinf) }) {
+        auto const r = y.pow(IW { W(e.inf()), W(e.sup()) });
+        for (int lane = 0; lane < 4; ++lane) {
+            auto const sl = I(y.inf().get(lane), y.sup().get(lane)).pow(e);
+            INFO("lane " << lane << " exponent [" << e.inf() << "," << e.sup() << "]");
+            CHECK(!r.is_empty().get(lane));
+            CHECK(r.inf().get(lane) <= sl.inf());
+            CHECK(r.sup().get(lane) >= sl.sup());
+        }
+    }
     // [0.5,1]^[0,inf] must contain 0.5 = 0.5^1 and reach 0
     CHECK(up.inf().get(0) == 0.0);
     CHECK(up.sup().get(0) >= 1.0);

@@ -909,9 +909,14 @@ public:
             auto const pos_hi = eve::if_else(b > one, pinf, eve::if_else(b == one, one, zero));
             auto const neg_lo = eve::if_else(b > one, zero, eve::if_else(b == one, one, pinf));
             auto const neg_hi = eve::if_else(a < one, pinf, eve::if_else(a == one, one, zero));
+            // p == +-0: x^0 = 1 (the general path computes 0 * log(x) and hits 0 * +-inf for bases
+            // touching 0 or unbounded). Zero-only bases stay empty, matching the scalar pow(int) path.
+            auto const p_zero = (p == zero) && !zero_mask;
             auto const clipped_empty = b < zero;
             lo = eve::if_else(inf_mask, eve::if_else(clipped_empty, nan_val, eve::if_else(zero_pos, pos_lo, neg_lo)), lo);
             hi = eve::if_else(inf_mask, eve::if_else(clipped_empty, nan_val, eve::if_else(zero_pos, pos_hi, neg_hi)), hi);
+            lo = eve::if_else(p_zero, one, lo);
+            hi = eve::if_else(p_zero, one, hi);
             lo = eve::if_else(empty_mask, nan_val, lo);
             hi = eve::if_else(empty_mask, nan_val, hi);
             return interval(std::pair<T,T>{lo, hi});
