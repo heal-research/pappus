@@ -520,6 +520,74 @@ TEST_CASE("trancendental functions", "[IA]")
     }
 }
 
+TEST_CASE("pow with an infinite exponent endpoint", "[IA]")
+{
+    constexpr auto pinf = std::numeric_limits<double>::infinity();
+    CHECK(I(0.5, 1.0).pow(pinf) == I(0.0, 1.0));
+    CHECK(I(0.5, 1.0).pow(-pinf) == I(1.0, pinf));
+    CHECK(I(0.2, 0.5).pow(pinf) == Z);
+    CHECK(I(2.0, 3.0).pow(-pinf) == Z);
+    CHECK(I(2.0, 3.0).pow(pinf) == I(pinf, pinf));
+    CHECK(I(0.5, 2.0).pow(pinf) == I(0.0, pinf));
+    CHECK(I(0.5, 1.0).pow(I(0.0, pinf)) == I(0.0, 1.0));
+    CHECK(I(0.5, 1.0).pow(I(-pinf, 0.0)) == I(1.0, pinf));
+    CHECK(I(2.0, 3.0).pow(I(0.0, pinf)) == I(1.0, pinf));
+    CHECK(I(-1.0, 1.0).pow(I(0.0, pinf)).inf() == 0.0);
+
+    // Zero base: 0^(+inf) = 0 and 0^(-inf) = +inf (limit convention). The union over a doubly
+    // infinite exponent is therefore [0, inf], a sound (if wide) enclosure.
+    CHECK(Z.pow(pinf) == Z);
+    CHECK(Z.pow(-pinf) == I(pinf, pinf));
+    CHECK(Z.pow(I(-pinf, pinf)) == I(0.0, pinf));
+    // Intermediate finite exponents stay enclosed for a doubly infinite exponent interval.
+    auto const full = I(0.5, 2.0).pow(I(-pinf, pinf));
+    CHECK(full.inf() == 0.0);
+    CHECK(full.sup() == pinf);
+    // An empty base stays empty.
+    CHECK(E.pow(pinf).is_empty());
+}
+
+TEST_CASE("pow with an infinite exponent endpoint in packed lanes", "[IA]")
+{
+    using W = eve::wide<double, eve::fixed<4>>;
+    using IW = pappus::interval<W>;
+    constexpr auto pinf = std::numeric_limits<double>::infinity();
+    // lanes: [0.5,1], [0.2,0.5], [2,3], [0.5,2]; each packed lane must enclose the scalar result
+    // (the packed path has no integer fast path, so x^0 is [1-eps, 1+eps] rather than exactly 1)
+    IW const x { W { 0.5, 0.2, 2.0, 0.5 }, W { 1.0, 0.5, 3.0, 2.0 } };
+    auto const up = x.pow(IW { W(0.0), W(pinf) });
+    auto const down = x.pow(IW { W(-pinf), W(0.0) });
+    auto const all = x.pow(IW { W(-pinf), W(pinf) });
+    for (int lane = 0; lane < 4; ++lane) {
+        auto const xl = I(x.inf().get(lane), x.sup().get(lane));
+        auto const ul = xl.pow(I(0.0, pinf));
+        auto const dl = xl.pow(I(-pinf, 0.0));
+        auto const al = xl.pow(I(-pinf, pinf));
+        INFO("lane " << lane);
+        CHECK(up.inf().get(lane) <= ul.inf());
+        CHECK(up.sup().get(lane) >= ul.sup());
+        CHECK(down.inf().get(lane) <= dl.inf());
+        CHECK(down.sup().get(lane) >= dl.sup());
+        CHECK(all.inf().get(lane) <= al.inf());
+        CHECK(all.sup().get(lane) >= al.sup());
+    }
+    // bases touching zero, crossing zero, or unbounded: the finite endpoint 0 must contribute x^0 = 1
+    IW const y { W { 0.0, -2.0, 2.0, 0.5 }, W { 0.5, 0.5, pinf, 4.0 } };
+    for (auto const& e : { I(0.0, pinf), I(-pinf, 0.0), I(-0.0, pinf) }) {
+        auto const r = y.pow(IW { W(e.inf()), W(e.sup()) });
+        for (int lane = 0; lane < 4; ++lane) {
+            auto const sl = I(y.inf().get(lane), y.sup().get(lane)).pow(e);
+            INFO("lane " << lane << " exponent [" << e.inf() << "," << e.sup() << "]");
+            CHECK(!r.is_empty().get(lane));
+            CHECK(r.inf().get(lane) <= sl.inf());
+            CHECK(r.sup().get(lane) >= sl.sup());
+        }
+    }
+    // [0.5,1]^[0,inf] must contain 0.5 = 0.5^1 and reach 0
+    CHECK(up.inf().get(0) == 0.0);
+    CHECK(up.sup().get(0) >= 1.0);
+}
+
 TEST_CASE("negative integer power of a tiny base stays non-empty", "[IA]")
 {
     using IF = pappus::interval<float>;

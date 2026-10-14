@@ -863,6 +863,17 @@ public:
     {
         if constexpr (std::floating_point<T>) {
             if (is_empty()) return interval::empty();
+            if (std::isinf(p)) {
+                // x^(+-inf) over x >= 0: 0 below 1, 1 at 1, inf above 1 (reciprocal for -inf).
+                auto const x = (*this) & interval(T(0), fp::inf_v<T>);
+                if (x.is_empty()) return interval::empty();
+                auto const a = x.inf(), b = x.sup();
+                auto const zero = T(0), one = T(1), inf = fp::inf_v<T>;
+                if (p > T(0)) {
+                    return interval(a < one ? zero : (a == one ? one : inf), b > one ? inf : (b == one ? one : zero));
+                }
+                return interval(b > one ? zero : (b == one ? one : inf), a < one ? inf : (a == one ? one : zero));
+            }
             // Casting an out-of-int-range integral p to int is implementation-
             // defined/UB territory; fall through to the general real-power path
             // instead for such p (extreme in practice, but a public API must
@@ -888,6 +899,24 @@ public:
             auto nan_val = eve::nan(eve::as<T>{});
             auto lo = eve::if_else(zero_mask, eve::if_else(zero_pos, T(+0.0), nan_val), general.inf());
             auto hi = eve::if_else(zero_mask, eve::if_else(zero_pos, T(-0.0), nan_val), general.sup());
+            // x^(+-inf) over x >= 0, lane-wise: 0 below 1, 1 at 1, inf above 1 (reciprocal for -inf).
+            // The general path above yields NaN (inf * log(x) with log(x) <= 0 at x = 1) for these lanes.
+            auto const inf_mask = eve::is_infinite(p);
+            auto const a = eve::max(inf(), T(0));
+            auto const b = sup();
+            auto const zero = T(0), one = T(1), pinf = eve::inf(eve::as<T>{});
+            auto const pos_lo = eve::if_else(a < one, zero, eve::if_else(a == one, one, pinf));
+            auto const pos_hi = eve::if_else(b > one, pinf, eve::if_else(b == one, one, zero));
+            auto const neg_lo = eve::if_else(b > one, zero, eve::if_else(b == one, one, pinf));
+            auto const neg_hi = eve::if_else(a < one, pinf, eve::if_else(a == one, one, zero));
+            // p == +-0: x^0 = 1 (the general path computes 0 * log(x) and hits 0 * +-inf for bases
+            // touching 0 or unbounded). Zero-only bases stay empty, matching the scalar pow(int) path.
+            auto const p_zero = (p == zero) && !zero_mask;
+            auto const clipped_empty = b < zero;
+            lo = eve::if_else(inf_mask, eve::if_else(clipped_empty, nan_val, eve::if_else(zero_pos, pos_lo, neg_lo)), lo);
+            hi = eve::if_else(inf_mask, eve::if_else(clipped_empty, nan_val, eve::if_else(zero_pos, pos_hi, neg_hi)), hi);
+            lo = eve::if_else(p_zero, one, lo);
+            hi = eve::if_else(p_zero, one, hi);
             lo = eve::if_else(empty_mask, nan_val, lo);
             hi = eve::if_else(empty_mask, nan_val, hi);
             return interval(std::pair<T,T>{lo, hi});
