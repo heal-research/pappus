@@ -550,6 +550,26 @@ TEST_CASE("negative integer power of a tiny base stays non-empty", "[IA]")
     CHECK(wide.sup() == finf);
 }
 
+TEMPLATE_TEST_CASE("negative integer power of a denormal base stays non-empty", "[IA]", float, double)
+{
+    using IT = pappus::interval<TestType>;
+    constexpr auto tinf = std::numeric_limits<TestType>::infinity();
+    constexpr auto dmin = std::numeric_limits<TestType>::denorm_min();
+    // |x|^p underflows to exactly zero (not just below): the clamp must yield +0, not -0
+    for (int p : { -3, -4 }) {
+        auto const pos = IT { dmin }.pow(p);
+        auto const neg = IT { -dmin }.pow(p);
+        INFO("p = " << p);
+        CHECK(!pos.is_empty());
+        CHECK(pos.sup() == tinf);
+        CHECK(!neg.is_empty());
+        CHECK(((p & 1) ? neg.inf() == -tinf : neg.sup() == tinf));
+    }
+    auto const mid = IT { TestType(0.001) }.pow(std::same_as<TestType, float> ? -31 : -111);
+    CHECK(!mid.is_empty());
+    CHECK(mid.sup() == tinf);
+}
+
 TEST_CASE("negative integer power of a tiny base stays non-empty in packed lanes", "[IA]")
 {
     using W = eve::wide<float, eve::fixed<4>>;
