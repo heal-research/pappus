@@ -1154,7 +1154,8 @@ private:
                 if (n & 1) r = fp::ropd<fp::op_mul>(r, ax);
                 if (n > 1) ax = fp::ropd<fp::op_mul>(ax, ax);
             }
-            return r;
+            // |x|^p >= 0: the downward underflow nudge must not cross zero
+            return r <= T(0) ? T(0) : r;
         } else {
             // Compute both directed-rounding variants of |x|^p by repeated
             // squaring (p is a single scalar exponent applied uniformly to
@@ -1167,6 +1168,7 @@ private:
                 if (n & 1) { rd = fp::ropd<fp::op_mul>(rd, ax_d); ru = fp::ropu<fp::op_mul>(ru, ax_u); }
                 if (n > 1) { ax_d = fp::ropd<fp::op_mul>(ax_d, ax_d); ax_u = fp::ropu<fp::op_mul>(ax_u, ax_u); }
             }
+            rd = eve::max(rd, T(0)); // |x|^p >= 0: the downward underflow nudge must not cross zero
             if (p & 1) return eve::if_else(x < T(0), -ru, rd);
             return rd;
         }
@@ -1182,7 +1184,8 @@ private:
                     if (n & 1) r = fp::ropd<fp::op_mul>(r, ax);
                     if (n > 1) ax = fp::ropd<fp::op_mul>(ax, ax);
                 }
-                return -r;
+                // downward magnitude must not cross zero before negation
+                return -(r <= T(0) ? T(0) : r);
             }
             T ax = std::fabs(x), r(1);
             for (int n = p; n > 0; n >>= 1) {
@@ -1197,6 +1200,7 @@ private:
                 if (n & 1) { rd = fp::ropd<fp::op_mul>(rd, ax_d); ru = fp::ropu<fp::op_mul>(ru, ax_u); }
                 if (n > 1) { ax_d = fp::ropd<fp::op_mul>(ax_d, ax_d); ax_u = fp::ropu<fp::op_mul>(ax_u, ax_u); }
             }
+            rd = eve::max(rd, T(0)); // downward magnitude must not cross zero before negation
             if (p & 1) return eve::if_else(x < T(0), -rd, ru);
             return ru;
         }

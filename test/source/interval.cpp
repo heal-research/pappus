@@ -588,6 +588,76 @@ TEST_CASE("pow with an infinite exponent endpoint in packed lanes", "[IA]")
     CHECK(up.sup().get(0) >= 1.0);
 }
 
+TEST_CASE("negative integer power of a tiny base stays non-empty", "[IA]")
+{
+    using IF = pappus::interval<float>;
+    constexpr auto finf = std::numeric_limits<float>::infinity();
+    IF const x { 3.19243e-4F, 3.89346e-2F };
+    for (int p : { -50, -60, -80, -100 }) {
+        auto const r = x.pow(p);
+        INFO("p = " << p);
+        CHECK(!r.is_empty());
+        CHECK(r.inf() >= 0.0F);
+        CHECK(r.sup() == finf);
+    }
+    // negative base, odd negative exponent: every point has a defined negative value
+    IF const n { -3.89346e-2F, -3.19243e-4F };
+    for (int p : { -51, -61, -81, -101 }) {
+        auto const r = n.pow(p);
+        INFO("p = " << p);
+        CHECK(!r.is_empty());
+        CHECK(r.inf() == -finf);
+        CHECK(r.sup() <= 0.0F);
+    }
+    // exponent interval containing 0 must contain 1, and the tiny-power end must reach 0 and inf
+    auto const wide = x.pow(IF { -100.0F, 100.0F });
+    CHECK(!wide.is_empty());
+    CHECK(wide.inf() >= 0.0F);
+    CHECK(wide.inf() <= 1.0F);
+    CHECK(wide.sup() >= 1.0F);
+    CHECK(wide.sup() == finf);
+}
+
+TEMPLATE_TEST_CASE("negative integer power of a denormal base stays non-empty", "[IA]", float, double)
+{
+    using IT = pappus::interval<TestType>;
+    constexpr auto tinf = std::numeric_limits<TestType>::infinity();
+    constexpr auto dmin = std::numeric_limits<TestType>::denorm_min();
+    // |x|^p underflows to exactly zero (not just below): the clamp must yield +0, not -0
+    for (int p : { -3, -4 }) {
+        auto const pos = IT { dmin }.pow(p);
+        auto const neg = IT { -dmin }.pow(p);
+        INFO("p = " << p);
+        CHECK(!pos.is_empty());
+        CHECK(pos.sup() == tinf);
+        CHECK(!neg.is_empty());
+        CHECK(((p & 1) ? neg.inf() == -tinf : neg.sup() == tinf));
+    }
+    auto const mid = IT { TestType(0.001) }.pow(std::same_as<TestType, float> ? -31 : -111);
+    CHECK(!mid.is_empty());
+    CHECK(mid.sup() == tinf);
+}
+
+TEST_CASE("negative integer power of a tiny base stays non-empty in packed lanes", "[IA]")
+{
+    using W = eve::wide<float, eve::fixed<4>>;
+    using IW = pappus::interval<W>;
+    IW const x { W(3.19243e-4F), W(3.89346e-2F) };
+    IW const n { W(-3.89346e-2F), W(-3.19243e-4F) };
+    for (int p : { -50, -80 }) {
+        auto const r = x.pow(p);
+        INFO("p = " << p);
+        CHECK(eve::none(r.is_empty()));
+        CHECK(eve::all(r.inf() >= W(0.0F)));
+    }
+    for (int p : { -51, -81 }) {
+        auto const r = n.pow(p);
+        INFO("p = " << p);
+        CHECK(eve::none(r.is_empty()));
+        CHECK(eve::all(r.sup() <= W(0.0F)));
+    }
+}
+
 TEST_CASE("power functions", "[IA]")
 {
     SECTION("integer power")
